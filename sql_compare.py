@@ -661,9 +661,8 @@ def compare_sql(a: str, b: str,
 
 def parse_args(argv):
     p = argparse.ArgumentParser(description="Compare two SQL statements with Exact/Canonical modes and GUI.")
-    g = p.add_mutually_exclusive_group()
-    g.add_argument("files", nargs="*", help="Two SQL files to compare")
-    g.add_argument("--strings", nargs=2, metavar=("SQL1", "SQL2"), help="Provide two SQL strings inline")
+    p.add_argument("files", nargs="*", help="Two SQL files to compare")
+    p.add_argument("--strings", nargs=2, metavar=("SQL1", "SQL2"), help="Provide two SQL strings inline")
     p.add_argument("--stdin", action="store_true", help="Read two SQL statements from stdin separated by a line with ---")
     p.add_argument("--mode", choices=["exact", "canonical", "both"], default="both", help="Comparison mode (default: both)")
     p.add_argument("--ignore-whitespace", action="store_true", help="Consider queries equal if they differ only by whitespace")
