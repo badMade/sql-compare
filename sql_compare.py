@@ -802,7 +802,7 @@ def generate_report(result: dict, mode: str, fmt: str, out_path: str, ignore_ws:
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>SQL Compare Report</title>
 <style>
-body { font-family: Segoe UI, Tahoma, Arial, sans-serif; margin: 16px; color: #111; }}
+body {{ font-family: Segoe UI, Tahoma, Arial, sans-serif; margin: 16px; color: #111; }}
 h1,h2 {{ margin: 12px 0; }}
 table.diff {{ font-family: Consolas, monospace; font-size: 12px; border-collapse: collapse; width: 100%; }}
 table.diff td, table.diff th {{ border: 1px solid #ddd; padding: 4px 6px; vertical-align: top; }}
