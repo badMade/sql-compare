@@ -158,17 +158,17 @@ def run_benchmark():
     clause_end_index_optimized(sql, start_pos)
 
     # Measure Original
-    t0 = time.time()
+    t0 = time.perf_counter()
     for _ in range(10):
         clause_end_index_original(sql, start_pos)
-    t1 = time.time()
+    t1 = time.perf_counter()
     orig_time = t1 - t0
 
     # Measure Optimized
-    t0 = time.time()
+    t0 = time.perf_counter()
     for _ in range(10):
         clause_end_index_optimized(sql, start_pos)
-    t1 = time.time()
+    t1 = time.perf_counter()
     opt_time = t1 - t0
 
     print(f"Original: {orig_time:.4f}s")
