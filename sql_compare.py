@@ -49,9 +49,11 @@ def strip_sql_comments(s: str) -> str:
     return s
 
 
+WHITESPACE_REGEX = re.compile(r"\s+")
+
 def collapse_whitespace(s: str) -> str:
     """Collapse runs of whitespace to a single space and strip."""
-    return re.sub(r"\s+", " ", s).strip()
+    return WHITESPACE_REGEX.sub(" ", s).strip()
 
 
 def uppercase_outside_quotes(s: str) -> str:
