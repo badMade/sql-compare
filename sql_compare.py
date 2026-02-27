@@ -36,6 +36,10 @@ try:
     TK_AVAILABLE = True
 except Exception:
     TK_AVAILABLE = False
+CLAUSE_TERMINATORS = [
+    "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+    "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"
+]
 
 
 # =============================
@@ -242,9 +246,7 @@ def top_level_find_kw(sql: str, kw: str, start: int = 0):
 def clause_end_index(sql: str, start: int) -> int:
     """
     Find end index for a clause (FROM or WHERE) to the next top-level major keyword.
-    """
-    terms = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW",
-             "UNION", "INTERSECT", "EXCEPT"]
+    terms = CLAUSE_TERMINATORS
     ends = []
     for term in terms:
         idx = top_level_find_kw(sql, term, start)
@@ -799,7 +801,7 @@ def generate_report(result: dict, mode: str, fmt: str, out_path: str, ignore_ws:
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>SQL Compare Report</title>
 <style>
-body {{ font-family: Segoe UI, Tahoma, Arial, sans-serif; margin: 16px; color: #111; }}
+body { font-family: Segoe UI, Tahoma, Arial, sans-serif; margin: 16px; color: #111; }}
 h1,h2 {{ margin: 12px 0; }}
 table.diff {{ font-family: Consolas, monospace; font-size: 12px; border-collapse: collapse; width: 100%; }}
 table.diff td, table.diff th {{ border: 1px solid #ddd; padding: 4px 6px; vertical-align: top; }}
