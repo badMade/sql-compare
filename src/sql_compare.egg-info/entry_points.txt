@@ -1,0 +1,2 @@
+[console_scripts]
+sql-compare = sql_compare.__main__:main
