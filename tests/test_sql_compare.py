@@ -146,7 +146,8 @@ class TestCanonicalizeJoins(unittest.TestCase):
 
         # Verify order: D, A, C, B
         # Regex needs to be loose on whitespace/conditions
-        self.assertRegex(result, r"FROM T1 FULL JOIN D.*JOIN A.*JOIN C.*LEFT JOIN B")
+        expected = "SELECT * FROM T1 FULL JOIN D ON 1=1 JOIN A ON 1=1 JOIN C ON 1=1 LEFT JOIN B ON 1=1"
+        self.assertEqual(normalize_sql(result), normalize_sql(expected))
 
 if __name__ == '__main__':
     unittest.main()
