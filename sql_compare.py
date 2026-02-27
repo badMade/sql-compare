@@ -39,10 +39,10 @@ try:
     TK_AVAILABLE = True
 except Exception:
     TK_AVAILABLE = False
-CLAUSE_TERMINATORS = [
+CLAUSE_TERMINATORS = (
     "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
     "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"
-]
+)
 
 
 # =============================
