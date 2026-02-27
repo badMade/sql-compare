@@ -39,6 +39,10 @@ try:
     TK_AVAILABLE = True
 except Exception:
     TK_AVAILABLE = False
+CLAUSE_TERMINATORS = (
+    "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+    "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"
+)
 
 
 # =============================
@@ -246,6 +250,7 @@ def clause_end_index(sql: str, start: int) -> int:
     """
     Find end index for a clause (FROM or WHERE) to the next top-level major keyword.
     """
+    terms = CLAUSE_TERMINATORS
     ends = []
     for term in SQL_CLAUSE_TERMINATORS:
         idx = top_level_find_kw(sql, term, start)
