@@ -89,8 +89,8 @@ class TestCanonicalizeJoins(unittest.TestCase):
         # Sorted: INNER A, then LEFT B.
 
         result = canonicalize_joins(sql, allow_left=True)
-        expected_regex = r"FROM Base JOIN A.*LEFT JOIN B"
-        self.assertRegex(result, expected_regex)
+        expected = "SELECT * FROM Base JOIN A ON 1=1 LEFT JOIN B ON 1=1"
+        self.assertEqual(normalize_sql(result), normalize_sql(expected))
 
     def test_full_outer_join_reordering(self):
         # Default: no reorder
