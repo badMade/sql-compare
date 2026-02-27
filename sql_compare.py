@@ -156,6 +156,11 @@ def remove_outer_parentheses(s: str) -> str:
             changed = True
     return s
 
+CLAUSE_KEYWORDS = [
+    "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW",
+    "UNION", "INTERSECT", "EXCEPT"
+]
+
 
 TOKEN_REGEX = re.compile(
     r"""
@@ -243,8 +248,7 @@ def clause_end_index(sql: str, start: int) -> int:
     """
     Find end index for a clause (FROM or WHERE) to the next top-level major keyword.
     """
-    terms = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW",
-             "UNION", "INTERSECT", "EXCEPT"]
+    terms = CLAUSE_KEYWORDS
     ends = []
     for term in terms:
         idx = top_level_find_kw(sql, term, start)
