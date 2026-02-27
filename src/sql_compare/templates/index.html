@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SQL Compare</title>
+    <style>
+        body { font-family: Segoe UI, Tahoma, Arial, sans-serif; margin: 2rem; max-width: 900px; margin-left: auto; margin-right: auto; }
+        .container { background: #f9f9f9; padding: 2rem; border-radius: 8px; border: 1px solid #ddd; }
+        h1 { margin-top: 0; }
+        .form-group { margin-bottom: 1.5rem; }
+        label { display: block; font-weight: bold; margin-bottom: 0.5rem; }
+        textarea { width: 100%; height: 150px; font-family: Consolas, monospace; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; resize: vertical; }
+        .row { display: flex; gap: 1rem; }
+        .col { flex: 1; }
+        .options { background: #fff; padding: 1rem; border: 1px solid #eee; border-radius: 4px; }
+        .checkbox-group { margin-bottom: 0.5rem; }
+        button { background: #007bff; color: white; border: none; padding: 0.75rem 1.5rem; font-size: 1rem; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        input[type="radio"], input[type="checkbox"] { margin-right: 0.5rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SQL Compare</h1>
+        <form action="/" method="post">
+            <div class="row">
+                <div class="col form-group">
+                    <label for="sql1">SQL Statement 1</label>
+                    <textarea name="sql1" id="sql1" placeholder="SELECT ..."></textarea>
+                </div>
+                <div class="col form-group">
+                    <label for="sql2">SQL Statement 2</label>
+                    <textarea name="sql2" id="sql2" placeholder="SELECT ..."></textarea>
+                </div>
+            </div>
+
+            <div class="form-group options">
+                <div class="checkbox-group">
+                    <strong>Mode:</strong>
+                    <label style="display:inline; font-weight:normal; margin-left:10px;"><input type="radio" name="mode" value="both" checked> Both</label>
+                    <label style="display:inline; font-weight:normal; margin-left:10px;"><input type="radio" name="mode" value="exact"> Exact</label>
+                    <label style="display:inline; font-weight:normal; margin-left:10px;"><input type="radio" name="mode" value="canonical"> Canonical</label>
+                </div>
+                <div class="checkbox-group">
+                    <label style="font-weight:normal;">
+                        <input type="checkbox" name="ignore_ws"> Ignore whitespace differences
+                    </label>
+                </div>
+                <hr style="border-top: 1px solid #eee; margin: 10px 0;">
+                <div class="checkbox-group">
+                    <label style="font-weight:normal;">
+                        <input type="checkbox" name="join_reorder" checked id="join_reorder"> Enable join reordering
+                    </label>
+                </div>
+                <div style="margin-left: 1.5rem;">
+                    <label style="font-weight:normal;">
+                        <input type="checkbox" name="allow_full" id="allow_full"> Allow FULL OUTER join reordering (heuristic)
+                    </label>
+                    <br>
+                    <label style="font-weight:normal;">
+                        <input type="checkbox" name="allow_left" id="allow_left"> Allow LEFT join reordering (heuristic)
+                    </label>
+                </div>
+            </div>
+
+            <button type="submit">Compare</button>
+        </form>
+    </div>
+    <script>
+        const joinCheck = document.getElementById('join_reorder');
+        const fullCheck = document.getElementById('allow_full');
+        const leftCheck = document.getElementById('allow_left');
+
+        function updateState() {
+            if (joinCheck.checked) {
+                fullCheck.disabled = false;
+                leftCheck.disabled = false;
+            } else {
+                fullCheck.disabled = true;
+                leftCheck.disabled = true;
+                fullCheck.checked = false;
+                leftCheck.checked = false;
+            }
+        }
+        joinCheck.addEventListener('change', updateState);
+        // Initial state
+        updateState();
+    </script>
+</body>
+</html>

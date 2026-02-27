@@ -1,0 +1,46 @@
+Metadata-Version: 2.4
+Name: sql-compare
+Version: 0.1.0
+Summary: A tool to compare two SQL statements with CLI, GUI, and Web interfaces.
+Author-email: Your Name <your.email@example.com>
+License: MIT
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: flask>=3.0.0
+Requires-Dist: gunicorn>=21.2.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Dynamic: license-file
+
+# SQL Compare
+
+A tool to compare two SQL statements via CLI, Tkinter GUI, or Web interface.
+Mirrors all features:
+- Whitespace-only comparison
+- Exact token comparison
+- Canonical comparison (Join reordering, Select/Where sorting)
+
+## Installation
+
+```bash
+pip install .
+```
+
+## Usage
+
+### CLI
+```bash
+sql-compare file1.sql file2.sql --mode both
+```
+
+### GUI (Desktop)
+```bash
+sql-compare
+```
+
+### Web
+```bash
+sql-compare --web
+```

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Comparison Result</title>
+    <style>
+        body { font-family: Segoe UI, Tahoma, Arial, sans-serif; margin: 2rem; }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 1rem;
+            padding: 0.5rem 1rem;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .back-link:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-link">&larr; Back to Compare</a>
+    {{ report_content|safe }}
+</body>
+</html>
