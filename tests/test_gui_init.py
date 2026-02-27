@@ -45,8 +45,8 @@ class TestSQLCompareGUIInit(unittest.TestCase):
         # Check variables initialized
         # sql_compare does: self.sql1_path = tk.StringVar()
         # So we check if our mocked tk.StringVar was called.
-        self.assertTrue(tk.StringVar.called)
-        self.assertTrue(tk.BooleanVar.called)
+        self.assertEqual(tk.StringVar.call_count, 3)
+        self.assertEqual(tk.BooleanVar.call_count, 4)
 
         # Check if frames were created
         self.assertTrue(ttk.Frame.called)
