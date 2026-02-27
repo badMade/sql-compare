@@ -35,6 +35,7 @@ WHITESPACE_REGEX = re.compile(r'\s+')
 
 
 # --- Optional GUI imports guarded ---
+
 try:
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
@@ -46,10 +47,23 @@ CLAUSE_TERMINATORS = (
     "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"
 )
 
-
-# =============================
 # Normalization & Utilities
 # =============================
+
+MAX_FILE_SIZE_MB = 20
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+
+def safe_read_file(path_str: str) -> str:
+    """Read a file safely, enforcing a size limit to prevent DoS."""
+    p = Path(path_str)
+    if not p.exists():
+        raise FileNotFoundError(f"File not found: {path_str}")
+
+    size = p.stat().st_size
+    if size > MAX_FILE_SIZE_BYTES:
+        raise ValueError(f"File too large: {path_str} ({size / (1024*1024):.2f} MB). Limit is {MAX_FILE_SIZE_MB} MB.")
+
+    return p.read_text(encoding="utf-8", errors="ignore")
 
 def strip_sql_comments(s: str) -> str:
     """Remove -- line comments and /* ... */ block comments (non-nested)."""
@@ -704,8 +718,8 @@ def load_inputs(args):
         return a, b, "stdin"
     if args.files and len(args.files) == 2:
         f1, f2 = args.files
-        a = Path(f1).read_text(encoding="utf-8", errors="ignore")
-        b = Path(f2).read_text(encoding="utf-8", errors="ignore")
+        a = safe_read_file(f1)
+        b = safe_read_file(f2)
         return a, b, "files"
     return None, None, None
 
@@ -925,8 +939,8 @@ class SQLCompareGUI:
         if not os.path.exists(p1) or not os.path.exists(p2):
             messagebox.showerror("File error", "One or both files do not exist."); return
         try:
-            a = Path(p1).read_text(encoding="utf-8", errors="ignore")
-            b = Path(p2).read_text(encoding="utf-8", errors="ignore")
+            a = safe_read_file(p1)
+            b = safe_read_file(p2)
             result = compare_sql(
                 a, b,
                 ignore_ws=self.ignore_ws.get(),
