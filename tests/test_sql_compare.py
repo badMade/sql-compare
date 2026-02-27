@@ -102,8 +102,8 @@ class TestCanonicalizeJoins(unittest.TestCase):
         # 'FULL' vs 'INNER'. F < I.
         # So FULL JOIN B should come before JOIN A.
         result = canonicalize_joins(sql, allow_full_outer=True)
-        expected_regex = r"FROM Base FULL JOIN B.*JOIN A"
-        self.assertRegex(result, expected_regex)
+        expected = "SELECT * FROM Base FULL JOIN B ON 1=1 JOIN A ON 1=1"
+        self.assertEqual(normalize_sql(result), normalize_sql(expected))
 
     def test_right_join_never_reordered(self):
         # RIGHT JOIN is not in the list of reorderables even if flags are on.
