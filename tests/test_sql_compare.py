@@ -54,7 +54,8 @@ class TestCanonicalizeJoins(unittest.TestCase):
 
         result = canonicalize_joins(sql)
         # We expect CROSS JOIN Y to appear first after Base
-        self.assertRegex(result, r"FROM Base CROSS JOIN Y.*JOIN Z.*NATURAL JOIN X")
+        expected = "SELECT * FROM Base CROSS JOIN Y JOIN Z ON 1=1 NATURAL JOIN X"
+        self.assertEqual(normalize_sql(result), normalize_sql(expected))
 
     def test_left_join_no_reorder_default(self):
         # LEFT JOINs should not move if allow_left=False
