@@ -458,10 +458,10 @@ def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: boo
         return False
     new_segments = []
     for is_reo, group in groupby(segments, key=lambda s: is_reorderable(s["type"])):
-        group_list = list(group)
         if is_reo:
-            group_list.sort(key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
-        new_segments.extend(group_list)
+            new_segments.extend(sorted(group, key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or "")))
+        else:
+            new_segments.extend(group)
 
     rebuilt = _rebuild_from_body(base, new_segments)
     s2 = s[:from_i + 4] + " " + rebuilt + " " + s[end_i:]
