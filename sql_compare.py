@@ -27,6 +27,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from itertools import groupby
 from collections import Counter
 
 # --- Optional GUI imports guarded ---
@@ -455,20 +456,12 @@ def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: boo
         if allow_left and tt == "LEFT":
             return True
         return False
-
     new_segments = []
-    run = []
-    for seg in segments:
-        if is_reorderable(seg["type"]):
-            run.append(seg)
-        else:
-            if run:
-                run = sorted(run, key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
-                new_segments.extend(run); run = []
-            new_segments.append(seg)
-    if run:
-        run = sorted(run, key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
-        new_segments.extend(run)
+    for is_reo, group in groupby(segments, key=lambda s: is_reorderable(s["type"])):
+        group_list = list(group)
+        if is_reo:
+            group_list.sort(key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
+        new_segments.extend(group_list)
 
     rebuilt = _rebuild_from_body(base, new_segments)
     s2 = s[:from_i + 4] + " " + rebuilt + " " + s[end_i:]
