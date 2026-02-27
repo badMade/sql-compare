@@ -42,15 +42,6 @@ class TestSQLCompare(unittest.TestCase):
 
     def test_join_reordering(self):
         # INNER JOINs should reorder by default
-        sql1 = "SELECT * FROM a JOIN b ON a.id=b.id JOIN c ON b.id=c.id"
-        sql2 = "SELECT * FROM a JOIN c ON b.id=c.id JOIN b ON a.id=b.id"
-        # Wait, the logic only reorders contiguous runs of reorderable types.
-        # Let's check if JOIN b and JOIN c are reorderable. Yes, INNER.
-        # But 'a' is the base table.
-        # The logic parses `base JOIN ... JOIN ...`.
-        # So it sees `JOIN b ...` and `JOIN c ...`.
-        # If they are both INNER, they are reordered.
-
         # Let's try explicit INNER JOIN syntax to be safe, though default is INNER.
         sql1 = "SELECT * FROM base INNER JOIN t1 ON 1=1 INNER JOIN t2 ON 1=1"
         sql2 = "SELECT * FROM base INNER JOIN t2 ON 1=1 INNER JOIN t1 ON 1=1"
