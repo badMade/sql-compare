@@ -37,8 +37,7 @@ class TestCanonicalizeWhereAnd(unittest.TestCase):
         # Try another order to force a swap
         sql2 = "SELECT * FROM t WHERE C=1 AND (A=1 OR B=1)"
         # Expected: "(A=1 OR B=1) AND C=1"
-        expected2 = "SELECT * FROM t WHERE (A=1 OR B=1) AND C=1"
-        self.assertEqual(sql_compare.canonicalize_where_and(sql2), expected2)
+        self.assertEqual(sql_compare.canonicalize_where_and(sql2), expected)
 
     def test_nested_parens(self):
         """Test nested parentheses are preserved."""
