@@ -29,7 +29,8 @@ class TestCanonicalizeJoins(unittest.TestCase):
         expected_part = "JOIN A ON A.id=T1.id JOIN B ON B.id=T1.id JOIN C ON C.id=T1.id"
 
         result = canonicalize_joins(sql)
-        self.assertIn(expected_part, result)
+        expected = "SELECT * FROM T1 JOIN A ON A.id=T1.id JOIN B ON B.id=T1.id JOIN C ON C.id=T1.id"
+        self.assertEqual(normalize_sql(result), normalize_sql(expected))
 
     def test_mixed_inner_cross_natural(self):
         # INNER, CROSS, NATURAL are all reorderable by default.
