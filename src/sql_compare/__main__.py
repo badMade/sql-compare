@@ -11,8 +11,9 @@ def main():
 
     if args.web:
         from .web import app
+        import os
         # In production this entry point might not be used, but for local testing:
-        app.run(debug=True, port=5000)
+        app.run(debug=os.environ.get('FLASK_DEBUG') == '1', port=5000)
         return
 
     # If no files/strings/stdin provided and not web, try to launch GUI
