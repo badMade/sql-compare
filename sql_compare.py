@@ -44,7 +44,27 @@ except Exception:
 
 def strip_sql_comments(s: str) -> str:
     """Remove -- line comments and /* ... */ block comments (non-nested)."""
-    s = re.sub(r"/\*.*?\*/", "", s, flags=re.S)
+    # 1. Block comments (iterative approach to avoid ReDoS)
+    out = []
+    last_pos = 0
+    while True:
+        start_pos = s.find("/*", last_pos)
+        if start_pos == -1:
+            out.append(s[last_pos:])
+            break
+        end_pos = s.find("*/", start_pos + 2)
+        if end_pos == -1:
+            # No closing marker found; keep the rest as-is
+            out.append(s[last_pos:])
+            break
+
+        # We found a comment from start_pos to end_pos + 2
+        out.append(s[last_pos:start_pos])
+        last_pos = end_pos + 2
+
+    s = "".join(out)
+
+    # 2. Line comments
     s = re.sub(r"--[^\n\r]*", "", s)
     return s
 
