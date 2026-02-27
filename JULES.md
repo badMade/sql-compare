@@ -9,7 +9,7 @@ This file contains notes and an overview of the `sql-compare` project for Jules.
 ## Key Features
 
 - **Comparison Modes:**
-  - `exact`: Checks for exact token equality (whitespace can be ignored).
+  - `exact`: Checks for exact token equality (ignores case, comments, and whitespace).
   - `canonical`: Ignores harmless reordering (SELECT list, WHERE AND terms, JOINs).
 - **Reports:** Generates color-coded HTML or TXT reports.
 - **Portability:** Single file `sql_compare.py` implementation, no external dependencies.
