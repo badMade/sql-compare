@@ -157,26 +157,31 @@ def remove_outer_parentheses(s: str) -> str:
     return s
 
 
-TOKEN_REGEX = re.compile(
-    r"""
-    (?:'(?:(?:''|[^'])*?)')            # single-quoted string
-  | (?:(?:(?:\bE)?")(?:(?:""|[^"])*?)")  # double-quoted string (allow E"..." too)
-  | (?:\[(?:[^\]]*?)\])                # [bracketed] identifier
-  | (?:`(?:[^`]*?)`)                   # `backticked` identifier
-  | (?:[A-Z_][A-Z0-9_\$]*\b)           # identifiers/keywords (after uppercasing)
-  | (?:[0-9]+\.[0-9]+|[0-9]+)          # numbers
-  | (?:<=|>=|<>|!=|:=|->|::)           # multi-char operators
-  | (?:[(),=*\/\+\-<>\.%])             # single-char tokens
-  | (?:\.)                             # dot
-  | (?:\s+)                            # whitespace (filtered out)
-    """,
-    re.VERBOSE | re.IGNORECASE,
-)
+
+
+class SQLTokenizer:
+    _TOKEN_REGEX = re.compile(
+        r"""
+        (?:'(?:(?:''|[^'])*?)')            # single-quoted string
+      | (?:(?:(?:\bE)?")(?:(?:""|[^"])*?)")  # double-quoted string (allow E"..." too)
+      | (?:\[(?:[^\]]*?)\])                # [bracketed] identifier
+      | (?:`(?:[^`]*?)`)                   # `backticked` identifier
+      | (?:[A-Z_][A-Z0-9_\$]*\b)           # identifiers/keywords (after uppercasing)
+      | (?:[0-9]+\.[0-9]+|[0-9]+)          # numbers
+      | (?:<=|>=|<>|!=|:=|->|::)           # multi-char operators
+      | (?:[(),=*\/\+\-<>\.%])             # single-char tokens
+      | (?:\.)                             # dot
+      | (?:\s+)                            # whitespace (filtered out)
+        """,
+        re.VERBOSE | re.IGNORECASE,
+    )
+
+    @staticmethod
+    def tokenize(sql: str):
+        return [m.group(0) for m in SQLTokenizer._TOKEN_REGEX.finditer(sql) if not m.group(0).isspace()]
 
 def tokenize(sql: str):
-    return [m.group(0) for m in TOKEN_REGEX.finditer(sql) if not m.group(0).isspace()]
-
-
+    return SQLTokenizer.tokenize(sql)
 def split_top_level(s: str, sep: str) -> list:
     """Split by sep at top-level (not inside quotes/parentheses/brackets/backticks)."""
     parts, buf = [], []
@@ -399,7 +404,7 @@ def _parse_from_clause_body(body: str):
 
         seg_type = join_kw.replace(" OUTER", "")
         seg_type = seg_type.upper()
-        seg_type = seg_type.replace(" JOIN", "").strip()
+        seg_type = re.sub(r"\bJOIN\b", "", seg_type).strip()
         if seg_type == "":
             seg_type = "INNER"
 
