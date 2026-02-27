@@ -1,0 +1,4 @@
+## 2024-05-24 - [Naive Regex Comment Stripping Vulnerability]
+**Vulnerability:** The function `strip_sql_comments` used naive regex replacements (`re.sub`) to remove SQL comments. This approach failed to respect SQL quoting rules (single quotes, double quotes, etc.), leading to the removal of valid string content that happened to look like a comment (e.g., `SELECT '/* not a comment */'`).
+**Learning:** Regex-based parsing for structured languages like SQL is often insufficient and dangerous because it lacks context awareness (state). It cannot easily distinguish between code and data (string literals).
+**Prevention:** Use state-machine-based parsers or lexers that track the current context (e.g., "inside single quote", "inside block comment") when processing code. Avoid global find-and-replace for syntax-sensitive operations.

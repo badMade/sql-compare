@@ -43,10 +43,92 @@ except Exception:
 # =============================
 
 def strip_sql_comments(s: str) -> str:
-    """Remove -- line comments and /* ... */ block comments (non-nested)."""
-    s = re.sub(r"/\*.*?\*/", "", s, flags=re.S)
-    s = re.sub(r"--[^\n\r]*", "", s)
-    return s
+    """
+    Remove -- line comments and /* ... */ block comments (non-nested) while respecting
+    quoted strings (single/double), brackets, and backticks.
+    Replaces block comments with a single space to avoid accidental token concatenation.
+    """
+    out = []
+    i = 0
+    n = len(s)
+    mode = None  # 'single', 'double', 'bracket', 'backtick', 'block_comment', 'line_comment'
+
+    while i < n:
+        ch = s[i]
+
+        if mode is None:
+            # Check for start of comments first (lookahead)
+            if ch == '-' and i + 1 < n and s[i+1] == '-':
+                mode = 'line_comment'
+                i += 2 # Skip both dashes
+                continue
+            elif ch == '/' and i + 1 < n and s[i+1] == '*':
+                mode = 'block_comment'
+                i += 2 # Skip /*
+                continue
+
+            # Check for start of quotes
+            if ch == "'":
+                mode = 'single'
+                out.append(ch)
+            elif ch == '"':
+                mode = 'double'
+                out.append(ch)
+            elif ch == '[':
+                mode = 'bracket'
+                out.append(ch)
+            elif ch == '`':
+                mode = 'backtick'
+                out.append(ch)
+            else:
+                out.append(ch)
+
+        elif mode == 'line_comment':
+            if ch == '\n' or ch == '\r':
+                mode = None
+                out.append(ch) # Keep the newline
+
+        elif mode == 'block_comment':
+            if ch == '*' and i + 1 < n and s[i+1] == '/':
+                mode = None
+                i += 2 # Skip */
+                out.append(' ') # Replace block comment with space
+                continue
+            # else: skip character
+
+        elif mode == 'single':
+            out.append(ch)
+            if ch == "'":
+                # Check for escaped single quote ''
+                if i + 1 < n and s[i+1] == "'":
+                    out.append(s[i+1])
+                    i += 1
+                else:
+                    mode = None
+
+        elif mode == 'double':
+            out.append(ch)
+            if ch == '"':
+                # Check for escaped double quote ""
+                if i + 1 < n and s[i+1] == '"':
+                    out.append(s[i+1])
+                    i += 1
+                else:
+                    mode = None
+
+        elif mode == 'bracket':
+            out.append(ch)
+            if ch == ']':
+                mode = None
+
+        elif mode == 'backtick':
+            out.append(ch)
+            if ch == '`':
+                mode = None
+
+        i += 1
+
+    return "".join(out)
 
 
 def collapse_whitespace(s: str) -> str:
