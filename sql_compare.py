@@ -216,10 +216,12 @@ def top_level_find_kw(sql: str, kw: str, start: int = 0):
     # 1. Structure characters: ' " [ ` ( ) which change parsing state
     # 2. The keyword itself (must be whole word)
 
-    # Pre-compile regex to jump between interesting points
-    # Group 1: Structure character
-    # Group 2: Keyword match
-    pattern = re.compile(rf"(['\"\[\`\(\)])|(\b{re.escape(kw_upper)}\b)")
+    # Cache compiled regex patterns on the function object to avoid re-compilation on every call.
+    if not hasattr(top_level_find_kw, "_pattern_cache"):
+        top_level_find_kw._pattern_cache = {}
+    if kw_upper not in top_level_find_kw._pattern_cache:
+        top_level_find_kw._pattern_cache[kw_upper] = re.compile(rf"(['\"\\[\`\\(\\)])|(\\b{re.escape(kw_upper)}\\b)")
+    pattern = top_level_find_kw._pattern_cache[kw_upper]
 
     i = start
     level = 0
