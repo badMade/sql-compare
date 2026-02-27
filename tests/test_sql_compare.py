@@ -14,8 +14,7 @@ class TestParseFromClauseBody(unittest.TestCase):
         base, segments = _parse_from_clause_body(body)
         self.assertEqual(base, "t1")
         self.assertEqual(len(segments), 1)
-        # The implementation returns 'JOIN' for a simple JOIN, not 'INNER'
-        self.assertEqual(segments[0]["type"], "JOIN")
+        self.assertEqual(segments[0]["type"], "INNER")
         self.assertEqual(segments[0]["table"], "t2")
         self.assertEqual(segments[0]["cond_kw"], "ON")
         self.assertEqual(segments[0]["cond"], "t1.id = t2.id")
