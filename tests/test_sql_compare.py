@@ -47,6 +47,10 @@ class TestCanonicalizeWhereAnd(unittest.TestCase):
         expected = "SELECT * FROM t WHERE ((A=1 OR B=1) AND D=1) AND C=1"
         self.assertEqual(sql_compare.canonicalize_where_and(sql), expected)
 
+        # Also test the swapped order to ensure sorting is effective
+        sql_swapped = "SELECT * FROM t WHERE C=1 AND ((A=1 OR B=1) AND D=1)"
+        self.assertEqual(sql_compare.canonicalize_where_and(sql_swapped), expected)
+
     def test_mixed_and_or_another_unsafe(self):
         """Another unsafe mixed case: A OR B AND C"""
         sql = "SELECT * FROM t WHERE A=1 OR B=1 AND C=1"
