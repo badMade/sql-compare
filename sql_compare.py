@@ -230,10 +230,10 @@ def _get_search_pattern(kw):
     # We use capturing groups for tokens we need to react to (parens, keyword).
 
     pat = r"""
-        (?:'(?:''|[^'])*')|             # Single quotes (skip)
-        (?:"(?:""|[^"])*")|             # Double quotes (skip)
-        (?:\[[^\]]*\])|                 # Brackets (skip)
-        (?:`[^`]*`)|                    # Backticks (skip)
+        (?:'(?:''|[^'])*(?:'|$))|       # Single quotes (skip; allow unterminated to EoS)
+        (?:"(?:""|[^"])*(?:"|$))|       # Double quotes (skip; allow unterminated to EoS)
+        (?:\[[^\]]*(?:\]|$))|           # Brackets (skip; allow unterminated to EoS)
+        (?:`[^`]*(?:`|$))|              # Backticks (skip; allow unterminated to EoS)
         ([()])|                         # Group 1: Parens
         (\b{}\b)                        # Group 2: Keyword
     """.format(re.escape(kw))
