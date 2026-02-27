@@ -26,9 +26,9 @@ import difflib
 import os
 import re
 import sys
-from pathlib import Path
-from itertools import groupby
 from collections import Counter
+from itertools import groupby
+from pathlib import Path
 
 # --- Optional GUI imports guarded ---
 try:
