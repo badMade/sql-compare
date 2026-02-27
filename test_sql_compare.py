@@ -75,44 +75,22 @@ class TestUppercaseOutsideQuotes(unittest.TestCase):
                 self.assertEqual(uppercase_outside_quotes(sql_input), expected)
 
 class TestStripSqlComments(unittest.TestCase):
-    def test_basic_line_comment(self):
-        sql = "select * from table -- comment"
-        expected = "select * from table "
-        self.assertEqual(strip_sql_comments(sql).strip(), expected.strip())
-
-    def test_basic_block_comment(self):
-        sql = "select * /* comment */ from table"
-        expected = "select *   from table"
-        self.assertEqual(strip_sql_comments(sql), expected)
-
-    def test_comment_inside_single_quotes(self):
-        # This currently fails with naive regex
-        sql = "select '/* not a comment */'"
-        expected = "select '/* not a comment */'"
-        self.assertEqual(strip_sql_comments(sql), expected)
-
-    def test_dash_comment_inside_single_quotes(self):
-        # This currently fails with naive regex
-        sql = "select '-- not a comment'"
-        expected = "select '-- not a comment'"
-        self.assertEqual(strip_sql_comments(sql), expected)
-
-    def test_comment_inside_double_quotes(self):
-        sql = 'select "/* not a comment */"'
-        expected = 'select "/* not a comment */"'
-        self.assertEqual(strip_sql_comments(sql), expected)
-
-    def test_mixed_quotes_and_comments(self):
-        sql = "select 'text' /* real comment */, \"--string\""
-        expected = "select 'text' , \"--string\""
-        # normalize spaces for comparison if needed, but exact match is better if possible
-        self.assertEqual(strip_sql_comments(sql).replace("  ", " "), expected.replace("  ", " "))
-
-    def test_complex_escaping(self):
-        # select 'it''s -- time'
-        sql = "select 'it''s -- time'"
-        expected = "select 'it''s -- time'"
-        self.assertEqual(strip_sql_comments(sql), expected)
+    def test_strip_sql_comments_scenarios(self):
+        test_cases = [
+            ("basic line comment", "select * from table -- comment", "select * from table "),
+            ("basic block comment", "select * /* comment */ from table", "select *   from table"),
+            ("block comment adds space", "a/*b*/c", "a c"),
+            ("comment in single quotes", "select '/* not a comment */'", "select '/* not a comment */'"),
+            ("dash comment in single quotes", "select '-- not a comment'", "select '-- not a comment'"),
+            ("comment in double quotes", 'select "/* not a comment */"', 'select "/* not a comment */"'),
+            ("mixed quotes and comments", "select 'text' /* real comment */, \"--string\"", "select 'text'  , \"--string\"" ),
+            ("escaped single quote", "select 'it''s -- time'", "select 'it''s -- time'"),
+            ("line comment with newline", "select 1; -- comment\nselect 2;", "select 1; \nselect 2;"),
+            ("empty string", "", ""),
+        ]
+        for description, sql_input, expected in test_cases:
+            with self.subTest(msg=description):
+                self.assertEqual(strip_sql_comments(sql_input), expected)
 
 
 if __name__ == '__main__':
