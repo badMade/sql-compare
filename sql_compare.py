@@ -299,6 +299,7 @@ def canonicalize_where_and(sql: str) -> str:
     if where_i == -1: return s
     end_i = clause_end_index(s, where_i + 5)
     body = s[where_i + 5:end_i].strip()
+    if top_level_find_kw(body, "OR") != -1: return s
     terms = split_top_level(body, " AND ")
     if len(terms) > 1:
         terms_sorted = sorted([collapse_whitespace(t) for t in terms], key=lambda z: z.upper())
