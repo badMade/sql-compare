@@ -232,8 +232,8 @@ def _get_search_pattern(kw):
     pat = r"""
         (?:'(?:''|[^'])*')|             # Single quotes (skip)
         (?:"(?:""|[^"])*")|             # Double quotes (skip)
-        (?:\[[^\]]*\])|                 # Brackets (skip)
-        (?:`[^`]*`)|                    # Backticks (skip)
+        (?:\_([(?:\]\]|[^\]])*\_])|         # Brackets (skip)
+        (?:`(?:``|[^`])*`)|            # Backticks (skip)
         ([()])|                         # Group 1: Parens
         (\b{}\b)                        # Group 2: Keyword
     """.format(re.escape(kw))
