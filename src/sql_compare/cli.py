@@ -52,8 +52,8 @@ def load_inputs(args):
         return a, b, "stdin"
     if args.files and len(args.files) == 2:
         f1, f2 = args.files
-        a = Path(f1).read_text(encoding="utf-8", errors="ignore")
-        b = Path(f2).read_text(encoding="utf-8", errors="ignore")
+        a = Path(f1).read_text(encoding="utf-8", errors="replace")
+        b = Path(f2).read_text(encoding="utf-8", errors="replace")
         return a, b, "files"
     return None, None, None
 
