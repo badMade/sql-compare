@@ -26,6 +26,7 @@ import difflib
 import os
 import re
 import sys
+import functools
 from pathlib import Path
 from collections import Counter
 
@@ -208,34 +209,62 @@ def split_top_level(s: str, sep: str) -> list:
     return [p for p in parts if p != ""]
 
 
+@functools.lru_cache(maxsize=32)
+def _get_search_pattern(kw):
+    """
+    Compile a regex that matches:
+    - Quoted strings (single/double)
+    - Bracket identifiers
+    - Backtick identifiers
+    - Parentheses (captured in group 1)
+    - The keyword (captured in group 2)
+    """
+    # Regex explanation:
+    # 1. Quoted strings (single/double)
+    # 2. Bracket identifiers
+    # 3. Backtick identifiers
+    # 4. Parentheses
+    # 5. The keyword (case insensitive boundary)
+
+    # We use non-capturing groups for the skip-over tokens.
+    # We use capturing groups for tokens we need to react to (parens, keyword).
+
+    pat = r"""
+        (?:'(?:''|[^'])*')|             # Single quotes (skip)
+        (?:"(?:""|[^"])*")|             # Double quotes (skip)
+        (?:\[[^\]]*\])|                 # Brackets (skip)
+        (?:`[^`]*`)|                    # Backticks (skip)
+        ([()])|                         # Group 1: Parens
+        (\b{}\b)                        # Group 2: Keyword
+    """.format(re.escape(kw))
+
+    return re.compile(pat, re.VERBOSE | re.IGNORECASE)
+
 def top_level_find_kw(sql: str, kw: str, start: int = 0):
     """Find top-level occurrence of keyword kw (word boundary) starting at start."""
-    kw = kw.upper()
-    i = start; mode = None; level = 0
-    while i < len(sql):
-        ch = sql[i]
-        if mode is None:
-            if ch == "'": mode = 'single'
-            elif ch == '"': mode = 'double'
-            elif ch == '[': mode = 'bracket'
-            elif ch == '`': mode = 'backtick'
-            elif ch == '(':
+    pattern = _get_search_pattern(kw)
+    level = 0
+
+    # Use finditer to scan through tokens of interest starting at 'start'
+    for match in pattern.finditer(sql, start):
+        # Check if it's a paren (Group 1)
+        paren = match.group(1)
+        if paren:
+            if paren == '(':
                 level += 1
-            elif ch == ')':
+            elif paren == ')':
                 level = max(0, level - 1)
+            continue
+
+        # Check if it's the keyword (Group 2)
+        kw_found = match.group(2)
+        if kw_found:
             if level == 0:
-                m = re.match(rf"\b{re.escape(kw)}\b", sql[i:])
-                if m: return i
-        else:
-            if mode == 'single' and ch == "'":
-                if i + 1 < len(sql) and sql[i + 1] == "'": i += 1
-                else: mode = None
-            elif mode == 'double' and ch == '"':
-                if i + 1 < len(sql) and sql[i + 1] == '"': i += 1
-                else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
-        i += 1
+                return match.start()
+            continue
+
+        # If neither group matched, it was a quoted string/identifier which we skip.
+
     return -1
 
 
