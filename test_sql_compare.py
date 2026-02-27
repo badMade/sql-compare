@@ -8,23 +8,43 @@ class TestUppercaseOutsideQuotes(unittest.TestCase):
 
     def test_single_quotes(self):
         """Test that content inside single quotes is preserved."""
-        self.assertEqual(uppercase_outside_quotes("select 'Val'"), "SELECT 'Val'")
-        self.assertEqual(uppercase_outside_quotes("'hello world'"), "'hello world'")
+        test_cases = [
+            ("select 'Val'", "SELECT 'Val'"),
+            ("'hello world'", "'hello world'"),
+        ]
+        for sql_input, expected in test_cases:
+            with self.subTest(sql_input=sql_input):
+                self.assertEqual(uppercase_outside_quotes(sql_input), expected)
 
     def test_double_quotes(self):
         """Test that content inside double quotes is preserved."""
-        self.assertEqual(uppercase_outside_quotes('select "Val"'), 'SELECT "Val"')
-        self.assertEqual(uppercase_outside_quotes('"hello world"'), '"hello world"')
+        test_cases = [
+            ('select "Val"', 'SELECT "Val"'),
+            ('"hello world"', '"hello world"'),
+        ]
+        for sql_input, expected in test_cases:
+            with self.subTest(sql_input=sql_input):
+                self.assertEqual(uppercase_outside_quotes(sql_input), expected)
 
     def test_brackets(self):
         """Test that content inside brackets is preserved."""
-        self.assertEqual(uppercase_outside_quotes("select [Val]"), "SELECT [Val]")
-        self.assertEqual(uppercase_outside_quotes("[hello world]"), "[hello world]")
+        test_cases = [
+            ("select [Val]", "SELECT [Val]"),
+            ("[hello world]", "[hello world]"),
+        ]
+        for sql_input, expected in test_cases:
+            with self.subTest(sql_input=sql_input):
+                self.assertEqual(uppercase_outside_quotes(sql_input), expected)
 
     def test_backticks(self):
         """Test that content inside backticks is preserved."""
-        self.assertEqual(uppercase_outside_quotes("select `Val`"), "SELECT `Val`")
-        self.assertEqual(uppercase_outside_quotes("`hello world`"), "`hello world`")
+        test_cases = [
+            ("select `Val`", "SELECT `Val`"),
+            ("`hello world`", "`hello world`"),
+        ]
+        for sql_input, expected in test_cases:
+            with self.subTest(sql_input=sql_input):
+                self.assertEqual(uppercase_outside_quotes(sql_input), expected)
 
     def test_escaped_single_quotes(self):
         """Test escaped single quotes (doubled single quotes)."""
@@ -46,8 +66,13 @@ class TestUppercaseOutsideQuotes(unittest.TestCase):
 
     def test_nested_looking_quotes(self):
         """Test quotes inside other quote types (should be treated as literal chars)."""
-        self.assertEqual(uppercase_outside_quotes("select '\"'"), "SELECT '\"'")
-        self.assertEqual(uppercase_outside_quotes('select "\'"'), 'SELECT "\'"')
+        test_cases = [
+            ("select '\"'", "SELECT '\"'"),
+            ('select "\'"', 'SELECT "\'"'),
+        ]
+        for sql_input, expected in test_cases:
+            with self.subTest(sql_input=sql_input):
+                self.assertEqual(uppercase_outside_quotes(sql_input), expected)
 
 if __name__ == '__main__':
     unittest.main()
