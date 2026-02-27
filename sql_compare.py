@@ -30,6 +30,7 @@ from pathlib import Path
 
 SQL_CLAUSE_TERMINATORS = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"]
 from collections import Counter
+import itertools
 
 # --- Optional GUI imports guarded ---
 try:
@@ -461,18 +462,13 @@ def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: boo
         return False
 
     new_segments = []
-    run = []
-    for seg in segments:
-        if is_reorderable(seg["type"]):
-            run.append(seg)
+    for is_reo, group in itertools.groupby(segments, key=lambda seg: is_reorderable(seg["type"])):
+        group_list = list(group)
+        if is_reo:
+            group_list.sort(key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
+            new_segments.extend(group_list)
         else:
-            if run:
-                run = sorted(run, key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
-                new_segments.extend(run); run = []
-            new_segments.append(seg)
-    if run:
-        run = sorted(run, key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
-        new_segments.extend(run)
+            new_segments.extend(group_list)
 
     rebuilt = _rebuild_from_body(base, new_segments)
     s2 = s[:from_i + 4] + " " + rebuilt + " " + s[end_i:]
