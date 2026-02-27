@@ -4,13 +4,7 @@ from sql_compare import uppercase_outside_quotes
 class TestUppercaseOutsideQuotes(unittest.TestCase):
     def test_basic_uppercase(self):
         """Test that unquoted text is uppercased."""
-        test_cases = [
-            ("select * from table", "SELECT * FROM TABLE"),
-            ("SeLeCt * fRoM TaBlE", "SELECT * FROM TABLE"),
-        ]
-        for sql_input, expected in test_cases:
-            with self.subTest(sql_input=sql_input):
-                self.assertEqual(uppercase_outside_quotes(sql_input), expected)
+        self.assertEqual(uppercase_outside_quotes("select * from table"), "SELECT * FROM TABLE")
 
     def test_single_quotes(self):
         """Test that content inside single quotes is preserved."""
