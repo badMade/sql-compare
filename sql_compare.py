@@ -27,6 +27,8 @@ import os
 import re
 import sys
 from pathlib import Path
+
+SQL_CLAUSE_TERMINATORS = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"]
 from collections import Counter
 
 # --- Optional GUI imports guarded ---
@@ -243,10 +245,8 @@ def clause_end_index(sql: str, start: int) -> int:
     """
     Find end index for a clause (FROM or WHERE) to the next top-level major keyword.
     """
-    terms = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW",
-             "UNION", "INTERSECT", "EXCEPT"]
     ends = []
-    for term in terms:
+    for term in SQL_CLAUSE_TERMINATORS:
         idx = top_level_find_kw(sql, term, start)
         if idx != -1: ends.append(idx)
     return min(ends) if ends else len(sql)
