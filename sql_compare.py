@@ -25,8 +25,8 @@ import argparse
 import difflib
 import os
 import re
-import sys
 import functools
+import sys
 from pathlib import Path
 from collections import Counter
 
@@ -232,8 +232,8 @@ def _get_search_pattern(kw):
     pat = r"""
         (?:'(?:''|[^'])*')|             # Single quotes (skip)
         (?:"(?:""|[^"])*")|             # Double quotes (skip)
-        (?:\_([(?:\]\]|[^\]])*\_])|         # Brackets (skip)
-        (?:`(?:``|[^`])*`)|            # Backticks (skip)
+        (?:\[[^\]]*\])|                 # Brackets (skip)
+        (?:`[^`]*`)|                    # Backticks (skip)
         ([()])|                         # Group 1: Parens
         (\b{}\b)                        # Group 2: Keyword
     """.format(re.escape(kw))
