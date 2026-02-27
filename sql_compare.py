@@ -863,6 +863,7 @@ class SQLCompareGUI:
 
         frm_btns = ttk.Frame(root); frm_btns.pack(fill="x", **pad)
         ttk.Button(frm_btns, text="Compare", command=self.do_compare).pack(side="left")
+        ttk.Button(frm_btns, text="Swap Files", command=self.swap_inputs).pack(side="left", padx=6)
         ttk.Button(frm_btns, text="Copy Output", command=self.copy_output).pack(side="left", padx=6)
         ttk.Button(frm_btns, text="Clear", command=self.clear_output).pack(side="left", padx=6)
         ttk.Button(frm_btns, text="Save Report…", command=self.save_report).pack(side="left", padx=6)
@@ -877,7 +878,8 @@ class SQLCompareGUI:
         xscroll.grid(row=1, column=0, sticky="ew")
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
 
-        ttk.Label(root, text="Tip: CLI supports --strings/--stdin, --mode, --ignore-whitespace, --join-reorder/--no-join-reorder, --allow-full-outer-reorder, --allow-left-reorder, and --report.").pack(anchor="w", padx=8, pady=4)
+        root.bind("<Control-Return>", lambda event: self.do_compare())
+        ttk.Label(root, text="Tip: Press Ctrl+Enter to Compare. CLI supports --strings/--stdin, --mode, --ignore-whitespace, --join-reorder, and --report.").pack(anchor="w", padx=8, pady=4)
 
         self.last_result = None  # cache for report generation
 
@@ -889,6 +891,11 @@ class SQLCompareGUI:
         else:
             self.chk_full.state(['disabled'])
             self.chk_left.state(['disabled'])
+
+    def swap_inputs(self):
+        a, b = self.sql1_path.get(), self.sql2_path.get()
+        self.sql1_path.set(b)
+        self.sql2_path.set(a)
 
     def browse1(self):
         path = filedialog.askopenfilename(title="Select SQL File 1",
