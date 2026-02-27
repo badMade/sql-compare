@@ -88,6 +88,7 @@ class TestParseFromClauseBody(unittest.TestCase):
         body = "t1 JOIN t2 USING (id)"
         base, segments = _parse_from_clause_body(body)
         self.assertEqual(base, "t1")
+        self.assertEqual(segments[0]["type"], "INNER")
         self.assertEqual(segments[0]["cond_kw"], "USING")
         self.assertEqual(segments[0]["cond"], "(id)")
 
