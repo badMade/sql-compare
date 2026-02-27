@@ -35,7 +35,14 @@ def index():
     # Generate full report HTML
     full_html = generate_report_html(result, mode, ignore_ws)
 
-    # This assumes `generate_report_html` is modified to return only the report body HTML.
-    embedded_content = generate_report_html(result, mode, ignore_ws)
+    # Extract style and body content for embedding
+    style_match = re.search(r'<style>(.*?)</style>', full_html, re.DOTALL)
+    body_match = re.search(r'<body>(.*?)</body>', full_html, re.DOTALL)
+
+    styles = style_match.group(1) if style_match else ""
+    body = body_match.group(1) if body_match else full_html
+
+    # Combine styles and body
+    embedded_content = f"<style>{styles}</style>\n{body}"
 
     return render_template("result.html", report_content=embedded_content)
