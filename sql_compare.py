@@ -398,9 +398,10 @@ def _parse_from_clause_body(body: str):
                 idx += 1
 
         seg_type = join_kw.replace(" OUTER", "")
-        seg_type = seg_type.upper()
-        seg_type = seg_type.replace(" JOIN", "").strip()
-        if seg_type == "":
+        if seg_type.endswith(" JOIN"):
+            seg_type = seg_type[:-5]
+        seg_type = seg_type.strip()
+        if seg_type == "" or seg_type == "JOIN":
             seg_type = "INNER"
 
         segments.append({
