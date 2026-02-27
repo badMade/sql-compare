@@ -239,17 +239,50 @@ def top_level_find_kw(sql: str, kw: str, start: int = 0):
     return -1
 
 
+CLAUSE_SCANNER_RE = re.compile(
+    r"""
+    '(?:''|[^'])*' |
+    "(?:""|[^"])*" |
+    \[[^\]]*\] |
+    `[^`]*` |
+    \( | \) |
+    \bWHERE\b |
+    \bGROUP\s+BY\b |
+    \bHAVING\b |
+    \bORDER\s+BY\b |
+    \bLIMIT\b |
+    \bOFFSET\b |
+    \bQUALIFY\b |
+    \bWINDOW\b |
+    \bUNION\b |
+    \bINTERSECT\b |
+    \bEXCEPT\b
+    """,
+    re.VERBOSE | re.IGNORECASE
+)
+
+
 def clause_end_index(sql: str, start: int) -> int:
     """
     Find end index for a clause (FROM or WHERE) to the next top-level major keyword.
+    Uses a regex scanner to skip over strings/parens/identifiers in one pass.
     """
-    terms = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW",
-             "UNION", "INTERSECT", "EXCEPT"]
-    ends = []
-    for term in terms:
-        idx = top_level_find_kw(sql, term, start)
-        if idx != -1: ends.append(idx)
-    return min(ends) if ends else len(sql)
+    level = 0
+    # Scan starting from 'start'
+    for match in CLAUSE_SCANNER_RE.finditer(sql, pos=start):
+        token = match.group(0).upper()
+        if token == '(':
+            level += 1
+        elif token == ')':
+            level = max(0, level - 1)
+        # Check if it's a string or identifier (starts with quote/bracket/backtick)
+        elif token.startswith("'") or token.startswith('"') or token.startswith('[') or token.startswith('`'):
+            pass
+        else:
+            # It's a keyword
+            if level == 0:
+                return match.start()
+    return len(sql)
 
 
 # =============================
