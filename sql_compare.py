@@ -39,6 +39,8 @@ except Exception:
 
 
 # =============================
+WHITESPACE_REGEX = re.compile(r"\s+")
+
 # Normalization & Utilities
 # =============================
 
