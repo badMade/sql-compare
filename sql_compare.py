@@ -399,7 +399,7 @@ def _parse_from_clause_body(body: str):
 
         seg_type = join_kw.replace(" OUTER", "")
         seg_type = seg_type.upper()
-        seg_type = seg_type.replace(" JOIN", "").strip()
+        seg_type = seg_type.replace("JOIN", "").strip()
         if seg_type == "":
             seg_type = "INNER"
 
