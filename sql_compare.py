@@ -30,7 +30,9 @@ from pathlib import Path
 
 SQL_CLAUSE_TERMINATORS = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"]
 from collections import Counter
-import itertools
+WHITESPACE_REGEX = re.compile(r'\s+')
+
+
 
 # --- Optional GUI imports guarded ---
 try:
@@ -58,7 +60,7 @@ def strip_sql_comments(s: str) -> str:
 
 def collapse_whitespace(s: str) -> str:
     """Collapse runs of whitespace to a single space and strip."""
-    return re.sub(r"\s+", " ", s).strip()
+    return WHITESPACE_REGEX.sub(" ", s).strip()
 
 
 def uppercase_outside_quotes(s: str) -> str:
