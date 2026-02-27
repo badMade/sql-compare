@@ -1,5 +1,65 @@
 import unittest
-from sql_compare import compare_sql
+from sql_compare import compare_sql, uppercase_outside_quotes
+
+class TestUppercaseOutsideQuotes(unittest.TestCase):
+    def test_basic_uppercase(self):
+        """Test that unquoted text is uppercased."""
+        self.assertEqual(uppercase_outside_quotes("select * from table"), "SELECT * FROM TABLE")
+
+    def test_single_quotes(self):
+        """Test that content inside single quotes is preserved."""
+        test_cases = [
+            ("select 'Val'", "SELECT 'Val'"),
+            ("'hello world'", "'hello world'"),
+        ]
+        for sql_input, expected in test_cases:
+            with self.subTest(sql_input=sql_input):
+                self.assertEqual(uppercase_outside_quotes(sql_input), expected)
+
+    def test_double_quotes(self):
+        """Test that content inside double quotes is preserved."""
+        test_cases = [
+            ('select "Val"', 'SELECT "Val"'),
+            ('"hello world"', '"hello world"'),
+        ]
+        for sql_input, expected in test_cases:
+            with self.subTest(sql_input=sql_input):
+                self.assertEqual(uppercase_outside_quotes(sql_input), expected)
+
+    def test_brackets(self):
+        """Test that content inside brackets is preserved."""
+        test_cases = [
+            ("select [Val]", "SELECT [Val]"),
+            ("[hello world]", "[hello world]"),
+        ]
+        for sql_input, expected in test_cases:
+            with self.subTest(sql_input=sql_input):
+                self.assertEqual(uppercase_outside_quotes(sql_input), expected)
+
+    def test_backticks(self):
+        """Test that content inside backticks is preserved."""
+        test_cases = [
+            ("select `Val`", "SELECT `Val`"),
+            ("`hello world`", "`hello world`"),
+        ]
+        for sql_input, expected in test_cases:
+            with self.subTest(sql_input=sql_input):
+                self.assertEqual(uppercase_outside_quotes(sql_input), expected)
+
+    def test_escaped_single_quotes(self):
+        """Test escaped single quotes (doubled single quotes)."""
+        self.assertEqual(uppercase_outside_quotes("select 'it''s'"), "SELECT 'it''s'")
+
+    def test_escaped_double_quotes(self):
+        """Test escaped double quotes (doubled double quotes)."""
+        self.assertEqual(uppercase_outside_quotes('select "says ""hello"""'), 'SELECT "says ""hello"""')
+
+    def test_mixed_quotes(self):
+        """Test mixed usage of quotes."""
+        sql = "select 'Val' as \"Alias\", [Col] from `Table` where x='y'"
+        expected = "SELECT 'Val' AS \"Alias\", [Col] FROM `Table` WHERE X='y'"
+        self.assertEqual(uppercase_outside_quotes(sql), expected)
+
 
 class TestSQLCompare(unittest.TestCase):
     def test_identity(self):
@@ -42,6 +102,7 @@ class TestSQLCompare(unittest.TestCase):
 
     def test_join_reordering(self):
         # INNER JOINs should reorder by default
+        # Let's try explicit INNER JOIN syntax to be safe, though default is INNER.
         sql1 = "SELECT * FROM base INNER JOIN t1 ON 1=1 INNER JOIN t2 ON 1=1"
         sql2 = "SELECT * FROM base INNER JOIN t2 ON 1=1 INNER JOIN t1 ON 1=1"
 
