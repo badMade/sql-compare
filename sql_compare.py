@@ -44,27 +44,7 @@ except Exception:
 
 def strip_sql_comments(s: str) -> str:
     """Remove -- line comments and /* ... */ block comments (non-nested)."""
-    # 1. Block comments (iterative approach to avoid ReDoS)
-    out = []
-    last_pos = 0
-    while True:
-        start_pos = s.find("/*", last_pos)
-        if start_pos == -1:
-            out.append(s[last_pos:])
-            break
-        end_pos = s.find("*/", start_pos + 2)
-        if end_pos == -1:
-            # No closing marker found; keep the rest as-is
-            out.append(s[last_pos:])
-            break
-
-        # We found a comment from start_pos to end_pos + 2
-        out.append(s[last_pos:start_pos])
-        last_pos = end_pos + 2
-
-    s = "".join(out)
-
-    # 2. Line comments
+    s = re.sub(r"/\*.*?\*/", "", s, flags=re.S)
     s = re.sub(r"--[^\n\r]*", "", s)
     return s
 
@@ -419,10 +399,14 @@ def _parse_from_clause_body(body: str):
 
         seg_type = join_kw.replace(" OUTER", "")
         seg_type = seg_type.upper()
-        seg_type = seg_type.replace(" JOIN", "").strip()
+        if seg_type.endswith(" JOIN"):
+            seg_type = seg_type[:-5]
+        elif seg_type == "JOIN":
+            seg_type = ""
+        seg_type = seg_type.strip()
         if seg_type == "":
             seg_type = "INNER"
-
+            seg_type = "INNER"
         segments.append({
             "type": seg_type,
             "table": collapse_whitespace(table_text),
@@ -844,16 +828,9 @@ table.diff thead th {{ background: #f6f8fa; }}
 class SQLCompareGUI:
     def __init__(self, root):
         self.root = root
-        self._setup_window()
-        self._init_vars()
-        self._create_widgets()
-        self.last_result = None  # cache for report generation
+        root.title("SQL Compare")
+        root.geometry("980x780")
 
-    def _setup_window(self):
-        self.root.title("SQL Compare")
-        self.root.geometry("980x780")
-
-    def _init_vars(self):
         self.sql1_path = tk.StringVar()
         self.sql2_path = tk.StringVar()
         self.mode = tk.StringVar(value="both")
@@ -862,18 +839,9 @@ class SQLCompareGUI:
         self.allow_full = tk.BooleanVar(value=False)
         self.allow_left = tk.BooleanVar(value=False)
 
-    def _create_widgets(self):
         pad = {"padx": 8, "pady": 6}
-        self._create_file_inputs(pad)
-        self._create_mode_inputs(pad)
-        self._create_flag_inputs(pad)
-        self._create_action_buttons(pad)
-        self._create_output_area(pad)
-        ttk.Label(self.root, text="Tip: CLI supports --strings/--stdin, --mode, --ignore-whitespace, --join-reorder/--no-join-reorder, --allow-full-outer-reorder, --allow-left-reorder, and --report.").pack(anchor="w", padx=8, pady=4)
 
-    def _create_file_inputs(self, pad):
-        frm_top = ttk.Frame(self.root)
-        frm_top.pack(fill="x", **pad)
+        frm_top = ttk.Frame(root); frm_top.pack(fill="x", **pad)
         ttk.Label(frm_top, text="SQL File 1:").grid(row=0, column=0, sticky="w")
         e1 = ttk.Entry(frm_top, textvariable=self.sql1_path, width=90); e1.grid(row=0, column=1, sticky="we", padx=(8, 8))
         ttk.Button(frm_top, text="Browse...", command=self.browse1).grid(row=0, column=2)
@@ -882,15 +850,13 @@ class SQLCompareGUI:
         ttk.Button(frm_top, text="Browse...", command=self.browse2).grid(row=1, column=2)
         frm_top.columnconfigure(1, weight=1)
 
-    def _create_mode_inputs(self, pad):
-        frm_mode = ttk.Frame(self.root); frm_mode.pack(fill="x", **pad)
+        frm_mode = ttk.Frame(root); frm_mode.pack(fill="x", **pad)
         ttk.Label(frm_mode, text="Mode:").pack(side="left")
         for text, val in [("Both", "both"), ("Exact", "exact"), ("Canonical", "canonical")]:
             ttk.Radiobutton(frm_mode, text=text, value=val, variable=self.mode).pack(side="left", padx=6)
         ttk.Checkbutton(frm_mode, text="Ignore whitespace differences", variable=self.ignore_ws).pack(side="left", padx=16)
 
-    def _create_flag_inputs(self, pad):
-        frm_flags = ttk.Frame(self.root); frm_flags.pack(fill="x", **pad)
+        frm_flags = ttk.Frame(root); frm_flags.pack(fill="x", **pad)
         self.chk_enable_join = ttk.Checkbutton(frm_flags, text="Enable join reordering", variable=self.enable_join, command=self._toggle_join_options)
         self.chk_enable_join.pack(side="left", padx=6)
         self.chk_full = ttk.Checkbutton(frm_flags, text="Allow FULL OUTER JOIN reordering (heuristic)", variable=self.allow_full)
@@ -899,15 +865,13 @@ class SQLCompareGUI:
         self.chk_left.pack(side="left", padx=6)
         self._toggle_join_options()  # set initial state
 
-    def _create_action_buttons(self, pad):
-        frm_btns = ttk.Frame(self.root); frm_btns.pack(fill="x", **pad)
+        frm_btns = ttk.Frame(root); frm_btns.pack(fill="x", **pad)
         ttk.Button(frm_btns, text="Compare", command=self.do_compare).pack(side="left")
         ttk.Button(frm_btns, text="Copy Output", command=self.copy_output).pack(side="left", padx=6)
         ttk.Button(frm_btns, text="Clear", command=self.clear_output).pack(side="left", padx=6)
         ttk.Button(frm_btns, text="Save Report…", command=self.save_report).pack(side="left", padx=6)
 
-    def _create_output_area(self, pad):
-        frm_out = ttk.Frame(self.root); frm_out.pack(fill="both", expand=True, **pad)
+        frm_out = ttk.Frame(root); frm_out.pack(fill="both", expand=True, **pad)
         self.txt = tk.Text(frm_out, wrap="none", font=("Consolas", 10))
         xscroll = ttk.Scrollbar(frm_out, orient="horizontal", command=self.txt.xview)
         yscroll = ttk.Scrollbar(frm_out, orient="vertical", command=self.txt.yview)
@@ -916,6 +880,10 @@ class SQLCompareGUI:
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
+
+        ttk.Label(root, text="Tip: CLI supports --strings/--stdin, --mode, --ignore-whitespace, --join-reorder/--no-join-reorder, --allow-full-outer-reorder, --allow-left-reorder, and --report.").pack(anchor="w", padx=8, pady=4)
+
+        self.last_result = None  # cache for report generation
 
     def _toggle_join_options(self):
         # Enable/disable dependent flags based on global join toggle
