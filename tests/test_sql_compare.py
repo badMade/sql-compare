@@ -118,7 +118,7 @@ class TestCanonicalizeJoins(unittest.TestCase):
         # C stays before B, A stays after B.
         # If they were merged, A (Inner) would come before C (Inner).
 
-        self.assertRegex(result, r"FROM Base JOIN C.*RIGHT JOIN B.*JOIN A")
+        self.assertEqual(normalize_sql(result), normalize_sql(sql))
 
     def test_complex_mix(self):
         # T1 (base)
