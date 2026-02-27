@@ -240,12 +240,12 @@ def top_level_find_kw(sql: str, kw: str, start: int = 0):
 
 
 # Optimization: Pre-compiled regex for clause_end_index
-CLAUSE_KEYWORDS = [
+CLAUSE_KEYWORDS = (
     "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
     "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"
-]
-CLAUSE_KEYWORDS.sort(key=len, reverse=True)
-_kw_pattern = "|".join(re.escape(k).replace(r"\ ", r"\s+") for k in CLAUSE_KEYWORDS)
+)
+_sorted_keywords = sorted(CLAUSE_KEYWORDS, key=len, reverse=True)
+_kw_pattern = "|".join(re.escape(k).replace(r"\ ", r"\s+") for k in _sorted_keywords)
 
 CLAUSE_SCANNER = re.compile(
     r"('(?:''|[^'])*')|"             # 1. Single quoted string
