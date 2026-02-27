@@ -27,7 +27,12 @@ import os
 import re
 import sys
 from pathlib import Path
+
+SQL_CLAUSE_TERMINATORS = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"]
 from collections import Counter
+WHITESPACE_REGEX = re.compile(r'\s+')
+
+
 
 # --- Optional GUI imports guarded ---
 
@@ -37,7 +42,10 @@ try:
     TK_AVAILABLE = True
 except Exception:
     TK_AVAILABLE = False
-    import tkinter as tk
+CLAUSE_TERMINATORS = (
+    "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
+    "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"
+)
 
 # Normalization & Utilities
 # =============================
@@ -66,7 +74,7 @@ def strip_sql_comments(s: str) -> str:
 
 def collapse_whitespace(s: str) -> str:
     """Collapse runs of whitespace to a single space and strip."""
-    return re.sub(r"\s+", " ", s).strip()
+    return WHITESPACE_REGEX.sub(" ", s).strip()
 
 
 def uppercase_outside_quotes(s: str) -> str:
@@ -258,10 +266,9 @@ def clause_end_index(sql: str, start: int) -> int:
     """
     Find end index for a clause (FROM or WHERE) to the next top-level major keyword.
     """
-    terms = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW",
-             "UNION", "INTERSECT", "EXCEPT"]
+    terms = CLAUSE_TERMINATORS
     ends = []
-    for term in terms:
+    for term in SQL_CLAUSE_TERMINATORS:
         idx = top_level_find_kw(sql, term, start)
         if idx != -1: ends.append(idx)
     return min(ends) if ends else len(sql)
@@ -414,10 +421,14 @@ def _parse_from_clause_body(body: str):
 
         seg_type = join_kw.replace(" OUTER", "")
         seg_type = seg_type.upper()
-        seg_type = seg_type.replace(" JOIN", "").strip()
+        if seg_type.endswith(" JOIN"):
+            seg_type = seg_type[:-5]
+        elif seg_type == "JOIN":
+            seg_type = ""
+        seg_type = seg_type.strip()
         if seg_type == "":
             seg_type = "INNER"
-
+            seg_type = "INNER"
         segments.append({
             "type": seg_type,
             "table": collapse_whitespace(table_text),
@@ -472,18 +483,13 @@ def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: boo
         return False
 
     new_segments = []
-    run = []
-    for seg in segments:
-        if is_reorderable(seg["type"]):
-            run.append(seg)
+    for is_reo, group in itertools.groupby(segments, key=lambda seg: is_reorderable(seg["type"])):
+        group_list = list(group)
+        if is_reo:
+            group_list.sort(key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
+            new_segments.extend(group_list)
         else:
-            if run:
-                run = sorted(run, key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
-                new_segments.extend(run); run = []
-            new_segments.append(seg)
-    if run:
-        run = sorted(run, key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
-        new_segments.extend(run)
+            new_segments.extend(group_list)
 
     rebuilt = _rebuild_from_body(base, new_segments)
     s2 = s[:from_i + 4] + " " + rebuilt + " " + s[end_i:]
