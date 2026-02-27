@@ -42,11 +42,29 @@ except Exception:
 # Normalization & Utilities
 # =============================
 
+COMMENT_STRIP_REGEX = re.compile(
+    r"""
+    ( --[^\r\n]* )              # Group 1: Line comment
+    | ( /\*.*?\*/ )             # Group 2: Block comment
+    | ( ' (?: [^'] | '' )* ' )  # Group 3: String literal
+    | ( " (?: [^"] | "" )* " )  # Group 4: Double quoted
+    | ( \[ (?: [^]] | ]] )* \] ) # Group 5: Brackets
+    | ( ` (?: [^`] | `` )* ` )  # Group 6: Backticks
+    """,
+    re.VERBOSE | re.DOTALL
+)
+
 def strip_sql_comments(s: str) -> str:
     """Remove -- line comments and /* ... */ block comments (non-nested)."""
-    s = re.sub(r"/\*.*?\*/", "", s, flags=re.S)
-    s = re.sub(r"--[^\n\r]*", "", s)
-    return s
+    def replace(match):
+        # If matched a comment (Group 1 or 2), replace with empty string.
+        # Otherwise (it's a quoted string/identifier), keep it.
+        if match.group(1) or match.group(2):
+            return ""
+        return match.group(0)
+
+    return COMMENT_STRIP_REGEX.sub(replace, s)
+
 
 
 def collapse_whitespace(s: str) -> str:
