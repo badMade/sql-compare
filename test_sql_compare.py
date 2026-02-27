@@ -42,7 +42,6 @@ class TestSQLCompare(unittest.TestCase):
 
     def test_join_reordering(self):
         # INNER JOINs should reorder by default
-        # Let's try explicit INNER JOIN syntax to be safe, though default is INNER.
         sql1 = "SELECT * FROM base INNER JOIN t1 ON 1=1 INNER JOIN t2 ON 1=1"
         sql2 = "SELECT * FROM base INNER JOIN t2 ON 1=1 INNER JOIN t1 ON 1=1"
 
