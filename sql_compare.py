@@ -210,32 +210,71 @@ def split_top_level(s: str, sep: str) -> list:
 
 def top_level_find_kw(sql: str, kw: str, start: int = 0):
     """Find top-level occurrence of keyword kw (word boundary) starting at start."""
-    kw = kw.upper()
-    i = start; mode = None; level = 0
+    kw_upper = kw.upper()
+
+    # We scan for:
+    # 1. Structure characters: ' " [ ` ( ) which change parsing state
+    # 2. The keyword itself (must be whole word)
+
+    # Pre-compile regex to jump between interesting points
+    # Group 1: Structure character
+    # Group 2: Keyword match
+    pattern = re.compile(rf"(['\"\[\`\(\)])|(\b{re.escape(kw_upper)}\b)")
+
+    i = start
+    level = 0
+
     while i < len(sql):
-        ch = sql[i]
-        if mode is None:
-            if ch == "'": mode = 'single'
-            elif ch == '"': mode = 'double'
-            elif ch == '[': mode = 'bracket'
-            elif ch == '`': mode = 'backtick'
-            elif ch == '(':
-                level += 1
-            elif ch == ')':
-                level = max(0, level - 1)
+        m = pattern.search(sql, i)
+        if not m:
+            return -1
+
+        start_match, end_match = m.span()
+        struct_char = m.group(1)
+        keyword_match = m.group(2)
+
+        if keyword_match:
+            # Found the keyword at top level?
             if level == 0:
-                m = re.match(rf"\b{re.escape(kw)}\b", sql[i:])
-                if m: return i
-        else:
-            if mode == 'single' and ch == "'":
-                if i + 1 < len(sql) and sql[i + 1] == "'": i += 1
-                else: mode = None
-            elif mode == 'double' and ch == '"':
-                if i + 1 < len(sql) and sql[i + 1] == '"': i += 1
-                else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
-        i += 1
+                return start_match
+            # If inside parens, ignore and skip past it
+            i = end_match
+            continue
+
+        if struct_char:
+            if struct_char == '(':
+                level += 1
+                i = end_match
+            elif struct_char == ')':
+                level = max(0, level - 1)
+                i = end_match
+            elif struct_char in ("'", '"', '[', '`'):
+                # Entering a quoted region - skip to end
+                mode_char = struct_char
+                closer = ']' if mode_char == '[' else mode_char
+
+                # Scan forward for closer
+                curr = end_match
+                while True:
+                    c_idx = sql.find(closer, curr)
+                    if c_idx == -1:
+                        # Unclosed string, consumed rest of string
+                        return -1
+
+                    # specific escaping rules for ' and " (doubled quotes)
+                    if mode_char in ("'", '"'):
+                        if c_idx + 1 < len(sql) and sql[c_idx + 1] == mode_char:
+                            # It is an escape (e.g. 'It''s'), skip both
+                            curr = c_idx + 2
+                            continue
+
+                    # Found closing quote/bracket
+                    i = c_idx + 1
+                    break
+            else:
+                # Should not be reached given regex
+                i = end_match
+
     return -1
 
 
