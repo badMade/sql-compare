@@ -246,6 +246,7 @@ def top_level_find_kw(sql: str, kw: str, start: int = 0):
 def clause_end_index(sql: str, start: int) -> int:
     """
     Find end index for a clause (FROM or WHERE) to the next top-level major keyword.
+    """
     terms = CLAUSE_TERMINATORS
     ends = []
     for term in terms:
