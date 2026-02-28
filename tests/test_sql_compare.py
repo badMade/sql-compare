@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, normalize_sql
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -72,3 +72,52 @@ class TestCanonicalizeJoins(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestNormalizeSql(unittest.TestCase):
+    def test_basic_normalization(self):
+        """Test collapsing whitespace and uppercasing outside quotes."""
+        sql = "   select  * \n from \t my_table   "
+        expected = "SELECT * FROM MY_TABLE"
+        self.assertEqual(normalize_sql(sql), expected)
+
+    def test_remove_comments(self):
+        """Test removing single-line and block comments."""
+        sql = "SELECT * /* block comment */ FROM t1 -- line comment\n WHERE id = 1"
+        expected = "SELECT * FROM T1 WHERE ID = 1"
+        self.assertEqual(normalize_sql(sql), expected)
+
+    def test_remove_trailing_semicolon(self):
+        """Test removing trailing semicolon."""
+        sql = "SELECT * FROM my_table;"
+        expected = "SELECT * FROM MY_TABLE"
+        self.assertEqual(normalize_sql(sql), expected)
+
+        sql_with_spaces = "SELECT * FROM my_table ;  "
+        expected_with_spaces = "SELECT * FROM MY_TABLE"
+        self.assertEqual(normalize_sql(sql_with_spaces), expected_with_spaces)
+
+    def test_preserve_quotes(self):
+        """Test that content inside quotes is NOT uppercased."""
+        sql = "SELECT 'lower_case', \"double_quote\", `backtick`, [bracket] FROM t1"
+        expected = "SELECT 'lower_case', \"double_quote\", `backtick`, [bracket] FROM T1"
+        self.assertEqual(normalize_sql(sql), expected)
+
+    def test_remove_outer_parentheses(self):
+        """Test removing outer parentheses."""
+        sql = "(((SELECT * FROM my_table)))"
+        expected = "SELECT * FROM MY_TABLE"
+        self.assertEqual(normalize_sql(sql), expected)
+
+    def test_complex_normalization(self):
+        """Test a combination of normalization steps."""
+        sql = """
+        -- A complex query
+        (
+            SELECT id, name /* internal block */
+            FROM users
+            WHERE status = 'active'
+        ) ;
+        """
+        expected = "SELECT ID, NAME FROM USERS WHERE STATUS = 'active'"
+        self.assertEqual(normalize_sql(sql), expected)
