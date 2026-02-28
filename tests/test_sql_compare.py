@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, clause_end_index
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -70,5 +70,59 @@ class TestCanonicalizeJoins(unittest.TestCase):
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
 
+
+class TestClauseEndIndex(unittest.TestCase):
+    def test_no_terminators(self):
+        """Should return length of string if no terminators found."""
+        sql = "SELECT * FROM my_table JOIN other_table ON a = b"
+        self.assertEqual(clause_end_index(sql, 0), len(sql))
+
+    def test_single_terminator(self):
+        """Should return index of the terminator."""
+        sql = "SELECT * FROM my_table WHERE a = 1"
+        # 'WHERE' starts at index 25
+        self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
+
+        sql = "SELECT * FROM my_table GROUP BY a"
+        self.assertEqual(clause_end_index(sql, 0), sql.index("GROUP BY"))
+
+    def test_multiple_terminators(self):
+        """Should return index of the first terminator found in the string."""
+        sql = "SELECT * FROM my_table WHERE a = 1 GROUP BY a ORDER BY a"
+        # Even though GROUP BY and ORDER BY exist, WHERE is first
+        self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
+
+        # If we start after WHERE, we should find GROUP BY
+        start_after_where = sql.index("WHERE") + 5
+        self.assertEqual(clause_end_index(sql, start_after_where), sql.index("GROUP BY"))
+
+    def test_terminator_inside_subquery(self):
+        """Should ignore terminators inside parentheses."""
+        sql = "SELECT * FROM t1 JOIN (SELECT * FROM t2 WHERE b = 1) ON a = b WHERE a = 1"
+        # The WHERE inside the subquery should be ignored.
+        # We want the index of the last WHERE.
+        self.assertEqual(clause_end_index(sql, 0), sql.rindex("WHERE"))
+
+    def test_terminator_inside_quotes(self):
+        """Should ignore terminators inside quotes or brackets."""
+        sql = "SELECT * FROM t1 WHERE a = 'WHERE' GROUP BY b"
+        # The 'WHERE' inside quotes should be ignored. We should find 'WHERE' keyword
+        self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
+
+        sql2 = "SELECT * FROM t1 JOIN u ON a = '[WHERE]' GROUP BY b"
+        self.assertEqual(clause_end_index(sql2, 0), sql2.index("GROUP BY"))
+
+        sql3 = "SELECT * FROM t1 JOIN u ON a = `WHERE` GROUP BY b"
+        self.assertEqual(clause_end_index(sql3, 0), sql3.index("GROUP BY"))
+
+    def test_different_start_indices(self):
+        """Should correctly offset the search based on start index."""
+        sql = "SELECT * FROM my_table WHERE a = 1"
+        self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
+
+        # If start is past WHERE, it shouldn't find it
+        self.assertEqual(clause_end_index(sql, sql.index("WHERE") + 1), len(sql))
+
 if __name__ == '__main__':
+
     unittest.main()
