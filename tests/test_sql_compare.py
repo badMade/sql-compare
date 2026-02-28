@@ -1,5 +1,7 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, parse_args
+import unittest.mock
+import sys
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +71,69 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+class TestParseArgs(unittest.TestCase):
+    def test_default_args(self):
+        args = parse_args([])
+        self.assertEqual(args.files, [])
+        self.assertIsNone(args.strings)
+        self.assertFalse(args.stdin)
+        self.assertEqual(args.mode, "both")
+        self.assertFalse(args.ignore_whitespace)
+        self.assertTrue(args.join_reorder)
+        self.assertFalse(args.allow_full_outer_reorder)
+        self.assertFalse(args.allow_left_reorder)
+        self.assertIsNone(args.report)
+        self.assertEqual(args.report_format, "html")
+
+    def test_files_args(self):
+        args = parse_args(["file1.sql", "file2.sql"])
+        self.assertEqual(args.files, ["file1.sql", "file2.sql"])
+
+    def test_strings_args(self):
+        args = parse_args(["--strings", "SELECT 1", "SELECT 2"])
+        self.assertEqual(args.strings, ["SELECT 1", "SELECT 2"])
+
+    def test_stdin_args(self):
+        args = parse_args(["--stdin"])
+        self.assertTrue(args.stdin)
+
+    def test_mode_args(self):
+        args = parse_args(["--mode", "exact"])
+        self.assertEqual(args.mode, "exact")
+        args = parse_args(["--mode", "canonical"])
+        self.assertEqual(args.mode, "canonical")
+
+    def test_ignore_whitespace_args(self):
+        args = parse_args(["--ignore-whitespace"])
+        self.assertTrue(args.ignore_whitespace)
+
+    def test_join_reorder_toggles(self):
+        args = parse_args(["--no-join-reorder"])
+        self.assertFalse(args.join_reorder)
+        args = parse_args(["--join-reorder"])
+        self.assertTrue(args.join_reorder)
+
+    def test_allow_reorder_flags(self):
+        args = parse_args(["--allow-full-outer-reorder", "--allow-left-reorder"])
+        self.assertTrue(args.allow_full_outer_reorder)
+        self.assertTrue(args.allow_left_reorder)
+
+    def test_report_args(self):
+        args = parse_args(["--report", "out.html", "--report-format", "txt"])
+        self.assertEqual(args.report, "out.html")
+        self.assertEqual(args.report_format, "txt")
+
+    @unittest.mock.patch('sys.stderr', new_callable=unittest.mock.MagicMock)
+    def test_invalid_mode_args(self, mock_stderr):
+        with self.assertRaises(SystemExit):
+            parse_args(["--mode", "invalid_mode"])
+
+    @unittest.mock.patch('sys.stderr', new_callable=unittest.mock.MagicMock)
+    def test_invalid_report_format_args(self, mock_stderr):
+        with self.assertRaises(SystemExit):
+            parse_args(["--report-format", "invalid_format"])
 
 if __name__ == '__main__':
     unittest.main()
