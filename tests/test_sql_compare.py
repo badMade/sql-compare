@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, strip_sql_comments
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +69,43 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+
+class TestStripSqlComments(unittest.TestCase):
+    def test_single_line_comment(self):
+        """Single line comments should be removed."""
+        sql = "SELECT * FROM users -- get all users\nWHERE id = 1"
+        expected = "SELECT * FROM users \nWHERE id = 1"
+        self.assertEqual(strip_sql_comments(sql), expected)
+
+    def test_block_comment(self):
+        """Block comments should be removed."""
+        sql = "SELECT * /* all columns */ FROM users"
+        expected = "SELECT *  FROM users"
+        self.assertEqual(strip_sql_comments(sql), expected)
+
+    def test_mixed_comments(self):
+        """Both single-line and block comments should be removed."""
+        sql = "SELECT * /* columns */ FROM users -- table\nWHERE id = 1 /* specific user */"
+        expected = "SELECT *  FROM users \nWHERE id = 1 "
+        self.assertEqual(strip_sql_comments(sql), expected)
+
+    def test_multiline_block_comment(self):
+        """Block comments spanning multiple lines should be removed."""
+        sql = "SELECT *\n/* block\ncomment */\nFROM users"
+        expected = "SELECT *\n\nFROM users"
+        self.assertEqual(strip_sql_comments(sql), expected)
+
+    def test_no_comments(self):
+        """Strings without comments should remain unchanged."""
+        sql = "SELECT * FROM users"
+        self.assertEqual(strip_sql_comments(sql), sql)
+
+    def test_empty_string(self):
+        """Empty strings should be handled correctly."""
+        self.assertEqual(strip_sql_comments(""), "")
+
 
 if __name__ == '__main__':
     unittest.main()
