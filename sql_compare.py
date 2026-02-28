@@ -1,3 +1,4 @@
+import itertools
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -180,6 +181,21 @@ def remove_outer_parentheses(s: str) -> str:
     return s
 
 
+
+terminators_pattern = "|".join(r"\b" + re.sub(r"\s+", r"\\s+", term) + r"\b" for term in SQL_CLAUSE_TERMINATORS)
+CLAUSE_SCANNER_RE = re.compile(
+    r"""
+    (?:'(?:(?:''|[^'])*?)')               # single-quoted string
+  | (?:(?:(?:\bE)?")(?:(?:""|[^"])*?)")   # double-quoted string (allow E"...")
+  | (?:\[(?:[^\]]*?)\])                   # [bracketed] identifier
+  | (?:`(?:[^`]*?)`)                      # `backticked` identifier
+  | \(                                    # open paren
+  | \)                                    # close paren
+  | (?:""" + terminators_pattern + r""")  # clause terminators
+    """,
+    re.VERBOSE | re.IGNORECASE
+)
+
 TOKEN_REGEX = re.compile(
     r"""
     (?:'(?:(?:''|[^'])*?)')            # single-quoted string
@@ -266,12 +282,18 @@ def clause_end_index(sql: str, start: int) -> int:
     """
     Find end index for a clause (FROM or WHERE) to the next top-level major keyword.
     """
-    terms = CLAUSE_TERMINATORS
-    ends = []
-    for term in SQL_CLAUSE_TERMINATORS:
-        idx = top_level_find_kw(sql, term, start)
-        if idx != -1: ends.append(idx)
-    return min(ends) if ends else len(sql)
+    level = 0
+    for m in CLAUSE_SCANNER_RE.finditer(sql, start):
+        token = m.group(0)
+        ch = token[0]
+        if ch == '(':
+            level += 1
+        elif ch == ')':
+            level = max(0, level - 1)
+        elif level == 0:
+            if not (ch in ("'", '"', '[', '`') or token.upper().startswith("E\"")):
+                return m.start()
+    return len(sql)
 
 
 # =============================
