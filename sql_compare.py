@@ -22,6 +22,7 @@ CLI Examples:
 """
 
 import argparse
+import itertools
 import difflib
 import os
 import re
