@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, compare_sql
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +69,76 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+class TestCompareSql(unittest.TestCase):
+    def test_ws_equal(self):
+        """Identical queries with different spacing should be ws_equal."""
+        sql1 = "SELECT *    FROM t1"
+        sql2 = "SELECT\n* FROM\n\n\nt1"
+        res = compare_sql(sql1, sql2)
+        self.assertTrue(res["ws_equal"])
+        self.assertTrue(res["exact_equal"])
+        self.assertTrue(res["canonical_equal"])
+
+    def test_exact_equal(self):
+        """Queries with different case/comments should be exact_equal but not ws_equal."""
+        sql1 = "SELECT a FROM t1 -- test"
+        sql2 = "select A from T1"
+        res = compare_sql(sql1, sql2)
+        self.assertFalse(res["ws_equal"])
+        self.assertTrue(res["exact_equal"])
+        self.assertTrue(res["canonical_equal"])
+
+    def test_canonical_equal_joins(self):
+        """Queries with reordered INNER JOINs should be canonical_equal but not exact_equal."""
+        sql1 = "SELECT * FROM t1 JOIN t2 ON id1=id2 JOIN t3 ON id1=id3"
+        sql2 = "SELECT * FROM t1 JOIN t3 ON id1=id3 JOIN t2 ON id1=id2"
+        res = compare_sql(sql1, sql2)
+        self.assertFalse(res["exact_equal"])
+        self.assertTrue(res["canonical_equal"])
+
+    def test_not_equal(self):
+        """Queries with different tables should not be equal in any way."""
+        sql1 = "SELECT * FROM t1"
+        sql2 = "SELECT * FROM t2"
+        res = compare_sql(sql1, sql2)
+        self.assertFalse(res["ws_equal"])
+        self.assertFalse(res["exact_equal"])
+        self.assertFalse(res["canonical_equal"])
+
+    def test_flags_propagation_allow_left(self):
+        """LEFT JOIN reordering should only happen if allow_left=True."""
+        sql1 = "SELECT * FROM t1 LEFT JOIN t2 ON id1=id2 LEFT JOIN t3 ON id1=id3"
+        sql2 = "SELECT * FROM t1 LEFT JOIN t3 ON id1=id3 LEFT JOIN t2 ON id1=id2"
+
+        # Default: shouldn't reorder LEFT JOIN
+        res_default = compare_sql(sql1, sql2)
+        self.assertFalse(res_default["canonical_equal"])
+
+        # With flag: should reorder
+        res_allowed = compare_sql(sql1, sql2, allow_left=True)
+        self.assertTrue(res_allowed["canonical_equal"])
+
+    def test_flags_propagation_allow_full_outer(self):
+        """FULL OUTER JOIN reordering should only happen if allow_full_outer=True."""
+        sql1 = "SELECT * FROM t1 FULL JOIN t2 ON id1=id2 FULL JOIN t3 ON id1=id3"
+        sql2 = "SELECT * FROM t1 FULL JOIN t3 ON id1=id3 FULL JOIN t2 ON id1=id2"
+
+        res_default = compare_sql(sql1, sql2)
+        self.assertFalse(res_default["canonical_equal"])
+
+        res_allowed = compare_sql(sql1, sql2, allow_full_outer=True)
+        self.assertTrue(res_allowed["canonical_equal"])
+
+    def test_flags_propagation_enable_join_reorder(self):
+        """INNER JOIN reordering should not happen if enable_join_reorder=False."""
+        sql1 = "SELECT * FROM t1 JOIN t2 ON id1=id2 JOIN t3 ON id1=id3"
+        sql2 = "SELECT * FROM t1 JOIN t3 ON id1=id3 JOIN t2 ON id1=id2"
+
+        res_disabled = compare_sql(sql1, sql2, enable_join_reorder=False)
+        self.assertFalse(res_disabled["canonical_equal"])
+
 
 if __name__ == '__main__':
     unittest.main()
