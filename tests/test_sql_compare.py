@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, remove_outer_parentheses
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +69,64 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+class TestRemoveOuterParentheses(unittest.TestCase):
+    def test_no_parentheses(self):
+        """String without parentheses should remain unchanged."""
+        sql = "SELECT * FROM table"
+        self.assertEqual(remove_outer_parentheses(sql), sql)
+
+    def test_simple_wrapping(self):
+        """Single layer of outer parentheses should be removed."""
+        sql = "(SELECT * FROM table)"
+        expected = "SELECT * FROM table"
+        self.assertEqual(remove_outer_parentheses(sql), expected)
+
+    def test_multiple_wrappings(self):
+        """Multiple layers of outer parentheses should be removed."""
+        sql = "(((SELECT * FROM table)))"
+        expected = "SELECT * FROM table"
+        self.assertEqual(remove_outer_parentheses(sql), expected)
+
+    def test_whitespace_inside_and_outside(self):
+        """Whitespace around and inside parentheses should be handled."""
+        sql = "  (  SELECT * FROM table  )  "
+        expected = "SELECT * FROM table"
+        self.assertEqual(remove_outer_parentheses(sql), expected)
+
+    def test_partial_wrapping(self):
+        """Parentheses that don't enclose the full statement shouldn't be removed."""
+        sql = "(SELECT 1) UNION (SELECT 2)"
+        self.assertEqual(remove_outer_parentheses(sql), sql)
+
+    def test_wrapping_with_internal_parentheses(self):
+        """Outer wrapping removed, inner parentheses preserved."""
+        sql = "(SELECT * FROM table WHERE id IN (1, 2))"
+        expected = "SELECT * FROM table WHERE id IN (1, 2)"
+        self.assertEqual(remove_outer_parentheses(sql), expected)
+
+    def test_parentheses_inside_quotes(self):
+        """Parentheses inside string literals are ignored as boundaries."""
+        sql = "SELECT '(hello)'"
+        self.assertEqual(remove_outer_parentheses(sql), sql)
+
+        sql2 = "SELECT \"(world)\""
+        self.assertEqual(remove_outer_parentheses(sql2), sql2)
+
+    def test_mismatched_parentheses(self):
+        """Mismatched parentheses (not a full wrapper) shouldn't be altered."""
+        sql = "(SELECT * FROM table"
+        self.assertEqual(remove_outer_parentheses(sql), sql)
+
+        sql2 = "SELECT * FROM table)"
+        self.assertEqual(remove_outer_parentheses(sql2), sql2)
+
+    def test_only_quotes(self):
+        """A string that looks like wrapped but starts/ends with quotes should remain."""
+        sql = "'(SELECT * FROM table)'"
+        self.assertEqual(remove_outer_parentheses(sql), sql)
+
 
 if __name__ == '__main__':
     unittest.main()
