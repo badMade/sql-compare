@@ -72,3 +72,65 @@ class TestCanonicalizeJoins(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class TestCompareSql(unittest.TestCase):
+    def test_compare_sql_exact_match(self):
+        from sql_compare import compare_sql
+        sql = "SELECT id, name FROM users WHERE active = 1;"
+        res = compare_sql(sql, sql)
+        self.assertTrue(res["ws_equal"])
+        self.assertTrue(res["exact_equal"])
+        self.assertTrue(res["canonical_equal"])
+        self.assertEqual(len(res["summary"]), 1)
+        self.assertIn("No structural differences detected", res["summary"][0])
+
+    def test_compare_sql_whitespace_diff(self):
+        from sql_compare import compare_sql
+        sql1 = "SELECT id, name FROM users WHERE active = 1;"
+        sql2 = "  SELECT   id,   name\nFROM users \nWHERE active = 1 \n/* comment */ ;"
+        res = compare_sql(sql1, sql2)
+        self.assertFalse(res["ws_equal"])
+        self.assertTrue(res["exact_equal"])
+        self.assertTrue(res["canonical_equal"])
+        self.assertEqual(len(res["summary"]), 1)
+        self.assertIn("No structural differences detected", res["summary"][0])
+
+    def test_compare_sql_canonical_match(self):
+        from sql_compare import compare_sql
+        sql1 = "SELECT id, name FROM users WHERE active = 1 AND role = 'admin'"
+        sql2 = "SELECT name, id FROM users WHERE role = 'admin' AND active = 1"
+        res = compare_sql(sql1, sql2)
+        self.assertFalse(res["ws_equal"])
+        self.assertFalse(res["exact_equal"])
+        self.assertTrue(res["canonical_equal"])
+
+        summary = " ".join(res["summary"])
+        # Should detect differences in SELECT and WHERE order, but state they are equivalent
+        self.assertIn("SELECT list order differs", summary)
+        self.assertIn("WHERE AND term order differs", summary)
+
+    def test_compare_sql_different(self):
+        from sql_compare import compare_sql
+        sql1 = "SELECT id FROM users WHERE active = 1"
+        sql2 = "SELECT id FROM users WHERE active = 0"
+        res = compare_sql(sql1, sql2)
+        self.assertFalse(res["ws_equal"])
+        self.assertFalse(res["exact_equal"])
+        self.assertFalse(res["canonical_equal"])
+
+        summary = " ".join(res["summary"])
+        self.assertIn("Token-level changes", summary)
+        self.assertNotIn("No structural differences detected", summary)
+
+    def test_compare_sql_join_reorder_flags(self):
+        from sql_compare import compare_sql
+        sql1 = "SELECT * FROM t1 LEFT JOIN t2 ON x FULL OUTER JOIN t3 ON y"
+        sql2 = "SELECT * FROM t1 FULL OUTER JOIN t3 ON y LEFT JOIN t2 ON x"
+
+        # Default flags (no reordering of LEFT or FULL OUTER)
+        res_default = compare_sql(sql1, sql2)
+        self.assertFalse(res_default["canonical_equal"])
+
+        # Enable LEFT and FULL OUTER reordering
+        res_flags = compare_sql(sql1, sql2, allow_left=True, allow_full_outer=True)
+        self.assertTrue(res_flags["canonical_equal"])
