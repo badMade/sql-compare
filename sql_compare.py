@@ -26,6 +26,7 @@ import difflib
 import os
 import re
 import sys
+import itertools
 from pathlib import Path
 
 SQL_CLAUSE_TERMINATORS = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"]
@@ -865,6 +866,7 @@ class SQLCompareGUI:
         ttk.Label(frm_top, text="SQL File 2:").grid(row=1, column=0, sticky="w")
         e2 = ttk.Entry(frm_top, textvariable=self.sql2_path, width=90); e2.grid(row=1, column=1, sticky="we", padx=(8, 8))
         ttk.Button(frm_top, text="Browse...", command=self.browse2).grid(row=1, column=2)
+        ttk.Button(frm_top, text="⇅ Swap", command=self.swap_files).grid(row=0, column=3, rowspan=2, padx=(8, 0), sticky="ns", pady=2)
         frm_top.columnconfigure(1, weight=1)
 
         frm_mode = ttk.Frame(root); frm_mode.pack(fill="x", **pad)
@@ -910,6 +912,12 @@ class SQLCompareGUI:
         else:
             self.chk_full.state(['disabled'])
             self.chk_left.state(['disabled'])
+
+    def swap_files(self):
+        p1 = self.sql1_path.get()
+        p2 = self.sql2_path.get()
+        self.sql1_path.set(p2)
+        self.sql2_path.set(p1)
 
     def browse1(self):
         path = filedialog.askopenfilename(title="Select SQL File 1",
