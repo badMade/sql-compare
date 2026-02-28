@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, compare_sql
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +69,51 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+class TestCompareSql(unittest.TestCase):
+    def test_exact_equal(self):
+        sql = "SELECT * FROM t1"
+        res = compare_sql(sql, sql)
+        self.assertTrue(res['ws_equal'])
+        self.assertTrue(res['exact_equal'])
+        self.assertTrue(res['canonical_equal'])
+
+    def test_ws_difference(self):
+        sql1 = "SELECT * FROM t1"
+        sql2 = "SELECT  *   FROM   t1"
+        res = compare_sql(sql1, sql2)
+        self.assertTrue(res['ws_equal'])
+        self.assertTrue(res['exact_equal'])
+        self.assertTrue(res['canonical_equal'])
+
+    def test_case_difference(self):
+        sql1 = "SELECT * FROM t1"
+        sql2 = "select * from t1"
+        res = compare_sql(sql1, sql2)
+        self.assertTrue(res['exact_equal'])
+        self.assertTrue(res['canonical_equal'])
+
+    def test_canonical_equal_only(self):
+        sql1 = "SELECT * FROM t1 JOIN t2 ON t1.id=t2.id JOIN t3 ON t1.id=t3.id"
+        sql2 = "SELECT * FROM t1 JOIN t3 ON t1.id=t3.id JOIN t2 ON t1.id=t2.id"
+        res = compare_sql(sql1, sql2)
+        self.assertFalse(res['exact_equal'])
+        self.assertTrue(res['canonical_equal'])
+
+    def test_not_equal(self):
+        sql1 = "SELECT * FROM t1"
+        sql2 = "SELECT * FROM t2"
+        res = compare_sql(sql1, sql2)
+        self.assertFalse(res['exact_equal'])
+        self.assertFalse(res['canonical_equal'])
+
+    def test_disable_join_reorder(self):
+        sql1 = "SELECT * FROM t1 JOIN t2 ON t1.id=t2.id JOIN t3 ON t1.id=t3.id"
+        sql2 = "SELECT * FROM t1 JOIN t3 ON t1.id=t3.id JOIN t2 ON t1.id=t2.id"
+        res = compare_sql(sql1, sql2, enable_join_reorder=False)
+        self.assertFalse(res['canonical_equal'])
+
 
 if __name__ == '__main__':
     unittest.main()
