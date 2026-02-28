@@ -25,6 +25,7 @@ import argparse
 import difflib
 import os
 import re
+import itertools
 import sys
 from pathlib import Path
 
@@ -329,6 +330,10 @@ def canonicalize_where_and(sql: str) -> str:
     return collapse_whitespace(s)
 
 
+
+JOIN_SCANNER_RE = re.compile(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", flags=re.I)
+ON_USING_SCANNER_RE = re.compile(r"\b(ON|USING)\b", flags=re.I)
+
 def _parse_from_clause_body(body: str):
     """
     Parse FROM body into base and join segments.
@@ -361,17 +366,17 @@ def _parse_from_clause_body(body: str):
             elif ch == ')':
                 level = max(0, level - 1)
             if level == 0:
-                m = re.match(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", body[i:], flags=re.I)
+                m = JOIN_SCANNER_RE.match(body, i)
                 if m:
                     flush_buf()
                     tokens.append(("JOINKW", collapse_whitespace(m.group(1)).upper()))
-                    i += m.end()
+                    i = m.end()
                     continue
-                m2 = re.match(r"\b(ON|USING)\b", body[i:], flags=re.I)
+                m2 = ON_USING_SCANNER_RE.match(body, i)
                 if m2:
                     flush_buf()
                     tokens.append(("CONDKW", m2.group(1).upper()))
-                    i += m2.end()
+                    i = m2.end()
                     continue
         else:
             if mode == 'single' and ch == "'":
