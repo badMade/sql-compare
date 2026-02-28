@@ -25,6 +25,7 @@ import argparse
 import difflib
 import os
 import re
+import itertools
 import sys
 from pathlib import Path
 
@@ -52,6 +53,45 @@ CLAUSE_TERMINATORS = (
 
 MAX_FILE_SIZE_MB = 20
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+
+class _SQLScanner:
+    """Encapsulates state machine logic for scanning SQL queries"""
+    def __init__(self):
+        self.mode = None
+        self.level = 0
+
+    def advance(self, s: str, i: int) -> int:
+        """Advance the scanner state by reading character(s) at index i. Returns next index."""
+        ch = s[i]
+        if self.mode is None:
+            if ch == "'": self.mode = 'single'
+            elif ch == '"': self.mode = 'double'
+            elif ch == '[': self.mode = 'bracket'
+            elif ch == '`': self.mode = 'backtick'
+            elif ch == '(': self.level += 1
+            elif ch == ')': self.level = max(0, self.level - 1)
+            return i + 1
+        else:
+            if self.mode == 'single' and ch == "'":
+                if i + 1 < len(s) and s[i + 1] == "'":
+                    return i + 2
+                else:
+                    self.mode = None
+                    return i + 1
+            elif self.mode == 'double' and ch == '"':
+                if i + 1 < len(s) and s[i + 1] == '"':
+                    return i + 2
+                else:
+                    self.mode = None
+                    return i + 1
+            elif self.mode == 'bracket' and ch == ']':
+                self.mode = None
+                return i + 1
+            elif self.mode == 'backtick' and ch == '`':
+                self.mode = None
+                return i + 1
+        return i + 1
+
 
 def safe_read_file(path_str: str) -> str:
     """Read a file safely, enforcing a size limit to prevent DoS."""
@@ -84,47 +124,16 @@ def uppercase_outside_quotes(s: str) -> str:
     """
     out = []
     i = 0
-    mode = None  # 'single', 'double', 'bracket', 'backtick'
+    scanner = _SQLScanner()
     while i < len(s):
-        ch = s[i]
-        if mode is None:
-            if ch == "'":
-                mode = 'single'
-                out.append(ch)
-            elif ch == '"':
-                mode = 'double'
-                out.append(ch)
-            elif ch == '[':
-                mode = 'bracket'
-                out.append(ch)
-            elif ch == '`':
-                mode = 'backtick'
-                out.append(ch)
-            else:
-                out.append(ch.upper())
-        elif mode == 'single':
-            out.append(ch)
-            if ch == "'":
-                if i + 1 < len(s) and s[i + 1] == "'":
-                    out.append(s[i + 1]); i += 1
-                else:
-                    mode = None
-        elif mode == 'double':
-            out.append(ch)
-            if ch == '"':
-                if i + 1 < len(s) and s[i + 1] == '"':
-                    out.append(s[i + 1]); i += 1
-                else:
-                    mode = None
-        elif mode == 'bracket':
-            out.append(ch)
-            if ch == ']':
-                mode = None
-        elif mode == 'backtick':
-            out.append(ch)
-            if ch == '`':
-                mode = None
-        i += 1
+        old_mode = scanner.mode
+        next_i = scanner.advance(s, i)
+
+        if old_mode is None and scanner.mode is None:
+            out.append(s[i:next_i].upper())
+        else:
+            out.append(s[i:next_i])
+        i = next_i
     return "".join(out)
 
 
@@ -138,38 +147,15 @@ def remove_outer_parentheses(s: str) -> str:
     def is_wrapped(text: str) -> bool:
         if not (text.startswith("(") and text.endswith(")")):
             return False
-        level = 0; mode = None; i = 0
+        i = 0
+        scanner = _SQLScanner()
         while i < len(text):
             ch = text[i]
-            if mode is None:
-                if ch == "'": mode = 'single'
-                elif ch == '"': mode = 'double'
-                elif ch == '[': mode = 'bracket'
-                elif ch == '`': mode = 'backtick'
-                elif ch == '(':
-                    level += 1
-                elif ch == ')':
-                    level -= 1
-                    if level == 0 and i != len(text) - 1:
-                        return False
-            elif mode == 'single':
-                if ch == "'":
-                    if i + 1 < len(text) and text[i + 1] == "'":
-                        i += 1
-                    else:
-                        mode = None
-            elif mode == 'double':
-                if ch == '"':
-                    if i + 1 < len(text) and text[i + 1] == '"':
-                        i += 1
-                    else:
-                        mode = None
-            elif mode == 'bracket':
-                if ch == ']': mode = None
-            elif mode == 'backtick':
-                if ch == '`': mode = None
-            i += 1
-        return level == 0
+            if scanner.mode is None and ch == ')':
+                if scanner.level == 1 and i != len(text) - 1:
+                    return False
+            i = scanner.advance(text, i)
+        return scanner.level == 0
     changed = True
     while changed:
         changed = False
@@ -203,30 +189,19 @@ def tokenize(sql: str):
 def split_top_level(s: str, sep: str) -> list:
     """Split by sep at top-level (not inside quotes/parentheses/brackets/backticks)."""
     parts, buf = [], []
-    level = 0; mode = None; i = 0
+    i = 0
+    scanner = _SQLScanner()
     while i < len(s):
-        ch = s[i]
-        if mode is None:
-            if ch == "'": mode = 'single'
-            elif ch == '"': mode = 'double'
-            elif ch == '[': mode = 'bracket'
-            elif ch == '`': mode = 'backtick'
-            elif ch == '(':
-                level += 1
-            elif ch == ')':
-                level = max(0, level - 1)
-            if level == 0 and s.startswith(sep, i):
-                parts.append("".join(buf).strip()); buf = []; i += len(sep); continue
-        else:
-            if mode == 'single' and ch == "'":
-                if i + 1 < len(s) and s[i + 1] == "'": buf.append(ch); i += 1
-                else: mode = None
-            elif mode == 'double' and ch == '"':
-                if i + 1 < len(s) and s[i + 1] == '"': buf.append(ch); i += 1
-                else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
-        buf.append(ch); i += 1
+        if scanner.mode is None and scanner.level == 0 and s.startswith(sep, i):
+            parts.append("".join(buf).strip())
+            buf = []
+            i += len(sep)
+            continue
+
+        next_i = scanner.advance(s, i)
+        buf.append(s[i:next_i])
+        i = next_i
+
     if buf: parts.append("".join(buf).strip())
     return [p for p in parts if p != ""]
 
@@ -234,31 +209,14 @@ def split_top_level(s: str, sep: str) -> list:
 def top_level_find_kw(sql: str, kw: str, start: int = 0):
     """Find top-level occurrence of keyword kw (word boundary) starting at start."""
     kw = kw.upper()
-    i = start; mode = None; level = 0
+    i = start
+    scanner = _SQLScanner()
+    pattern = re.compile(rf"\b{re.escape(kw)}\b")
     while i < len(sql):
-        ch = sql[i]
-        if mode is None:
-            if ch == "'": mode = 'single'
-            elif ch == '"': mode = 'double'
-            elif ch == '[': mode = 'bracket'
-            elif ch == '`': mode = 'backtick'
-            elif ch == '(':
-                level += 1
-            elif ch == ')':
-                level = max(0, level - 1)
-            if level == 0:
-                m = re.match(rf"\b{re.escape(kw)}\b", sql[i:])
-                if m: return i
-        else:
-            if mode == 'single' and ch == "'":
-                if i + 1 < len(sql) and sql[i + 1] == "'": i += 1
-                else: mode = None
-            elif mode == 'double' and ch == '"':
-                if i + 1 < len(sql) and sql[i + 1] == '"': i += 1
-                else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
-        i += 1
+        if scanner.mode is None and scanner.level == 0:
+            m = pattern.match(sql, i)
+            if m: return i
+        i = scanner.advance(sql, i)
     return -1
 
 
@@ -340,7 +298,6 @@ def _parse_from_clause_body(body: str):
     Heuristic, top-level only.
     """
     i = 0; n = len(body)
-    mode = None; level = 0
     tokens = []
     buf = []
     def flush_buf():
@@ -349,40 +306,29 @@ def _parse_from_clause_body(body: str):
             tokens.append(("TEXT", collapse_whitespace("".join(buf)).strip()))
             buf = []
 
+    scanner = _SQLScanner()
+    join_pattern = re.compile(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", flags=re.I)
+    cond_pattern = re.compile(r"\b(ON|USING)\b", flags=re.I)
+
     while i < n:
-        ch = body[i]
-        if mode is None:
-            if ch == "'": mode = 'single'
-            elif ch == '"': mode = 'double'
-            elif ch == '[': mode = 'bracket'
-            elif ch == '`': mode = 'backtick'
-            elif ch == '(':
-                level += 1
-            elif ch == ')':
-                level = max(0, level - 1)
-            if level == 0:
-                m = re.match(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", body[i:], flags=re.I)
-                if m:
-                    flush_buf()
-                    tokens.append(("JOINKW", collapse_whitespace(m.group(1)).upper()))
-                    i += m.end()
-                    continue
-                m2 = re.match(r"\b(ON|USING)\b", body[i:], flags=re.I)
-                if m2:
-                    flush_buf()
-                    tokens.append(("CONDKW", m2.group(1).upper()))
-                    i += m2.end()
-                    continue
-        else:
-            if mode == 'single' and ch == "'":
-                if i + 1 < n and body[i + 1] == "'": buf.append(ch); i += 1
-                else: mode = None
-            elif mode == 'double' and ch == '"':
-                if i + 1 < n and body[i + 1] == '"': buf.append(ch); i += 1
-                else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
-        buf.append(ch); i += 1
+        if scanner.mode is None and scanner.level == 0:
+            m = join_pattern.match(body, i)
+            if m:
+                flush_buf()
+                tokens.append(("JOINKW", collapse_whitespace(m.group(1)).upper()))
+                i = m.end()
+                continue
+            m2 = cond_pattern.match(body, i)
+            if m2:
+                flush_buf()
+                tokens.append(("CONDKW", m2.group(1).upper()))
+                i = m2.end()
+                continue
+
+        next_i = scanner.advance(body, i)
+        buf.append(body[i:next_i])
+        i = next_i
+
     flush_buf()
 
     base = ""
