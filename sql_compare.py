@@ -29,6 +29,16 @@ import sys
 from pathlib import Path
 from collections import Counter
 
+MAX_FILE_SIZE_MB = 20
+MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
+
+def safe_read_file(filepath: str | Path) -> str:
+    """Read a file with a strict size limit to prevent DoS via unbounded memory allocation."""
+    path_obj = Path(filepath)
+    if path_obj.stat().st_size > MAX_FILE_SIZE_BYTES:
+        raise ValueError(f"File '{path_obj.name}' exceeds the maximum allowed size of {MAX_FILE_SIZE_MB}MB.")
+    return path_obj.read_text(encoding="utf-8", errors="ignore")
+
 # --- Optional GUI imports guarded ---
 try:
     import tkinter as tk
@@ -760,8 +770,8 @@ def load_inputs(args):
         return a, b, "stdin"
     if args.files and len(args.files) == 2:
         f1, f2 = args.files
-        a = Path(f1).read_text(encoding="utf-8", errors="ignore")
-        b = Path(f2).read_text(encoding="utf-8", errors="ignore")
+        a = safe_read_file(f1)
+        b = safe_read_file(f2)
         return a, b, "files"
     return None, None, None
 
@@ -981,8 +991,8 @@ class SQLCompareGUI:
         if not os.path.exists(p1) or not os.path.exists(p2):
             messagebox.showerror("File error", "One or both files do not exist."); return
         try:
-            a = Path(p1).read_text(encoding="utf-8", errors="ignore")
-            b = Path(p2).read_text(encoding="utf-8", errors="ignore")
+            a = safe_read_file(p1)
+            b = safe_read_file(p2)
             result = compare_sql(
                 a, b,
                 ignore_ws=self.ignore_ws.get(),
