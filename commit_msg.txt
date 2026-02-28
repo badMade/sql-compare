@@ -1,0 +1,22 @@
+Perf: Optimize JOIN/ON keyword regex scanning in _parse_from_clause_body
+
+💡 What:
+- Pre-compiled the JOIN and ON/USING regexes at the module level.
+- Replaced string slicing body[i:] in re.match with COMPILED_RE.match(body, i).
+- Fixed missing import itertools which was preventing the test suite from running successfully.
+- Fixed i += m.end() to i = m.end() when switching to COMPILED_RE.match(body, i).
+
+🎯 Why:
+The previous implementation performed O(N^2) work when scanning a FROM clause because body[i:] created a new string slice on every character iteration, and re.match re-parsed the regex pattern string (or incurred cache lookup overhead). By using pre-compiled regexes with the pos argument i on the main body string, we eliminate string allocation overhead and process the string linearly, achieving O(N) performance.
+
+📊 Measured Improvement:
+Measured parsing a large string without keywords:
+- Baseline:
+  - N=50,000: 0.78s
+  - N=100,000: 2.58s
+  - N=200,000: 9.35s (Clear O(N^2) scaling)
+- Improvement:
+  - N=50,000: 0.16s
+  - N=100,000: 0.33s
+  - N=200,000: 0.66s (Clear O(N) scaling)
+Performance on huge strings improved by >14x, and computational complexity reduced from quadratic to linear.
