@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, remove_trailing_semicolon
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +69,28 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+class TestRemoveTrailingSemicolon(unittest.TestCase):
+    def test_no_semicolon(self):
+        self.assertEqual(remove_trailing_semicolon("SELECT * FROM t"), "SELECT * FROM t")
+
+    def test_single_semicolon(self):
+        self.assertEqual(remove_trailing_semicolon("SELECT * FROM t;"), "SELECT * FROM t")
+
+    def test_trailing_spaces_after_semicolon(self):
+        self.assertEqual(remove_trailing_semicolon("SELECT * FROM t;  "), "SELECT * FROM t")
+
+    def test_spaces_before_semicolon(self):
+        # strip() won't remove spaces before the semicolon, but the semicolon is removed
+        self.assertEqual(remove_trailing_semicolon("SELECT * FROM t ;"), "SELECT * FROM t ")
+
+    def test_multiple_semicolons(self):
+        # the function only strips the last character if it's a semicolon
+        self.assertEqual(remove_trailing_semicolon("SELECT * FROM t;;"), "SELECT * FROM t;")
+
+    def test_only_semicolon(self):
+        self.assertEqual(remove_trailing_semicolon(";"), "")
 
 if __name__ == '__main__':
     unittest.main()

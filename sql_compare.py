@@ -20,6 +20,7 @@ CLI Examples:
   python sql_compare.py --strings "select b,a from t" "SELECT a,b FROM t" --ignore-whitespace
   type queries.txt | python sql_compare.py --stdin --mode canonical --allow-full-outer-reorder --allow-left-reorder
 """
+import itertools
 
 import argparse
 import difflib
