@@ -70,5 +70,88 @@ class TestCanonicalizeJoins(unittest.TestCase):
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
 
+import unittest
+from unittest.mock import patch, MagicMock
+
+# This assumes we will append this to tests/test_sql_compare.py
+from sql_compare import load_inputs
+
+class TestLoadInputs(unittest.TestCase):
+    def test_load_inputs_strings(self):
+        """Test load_inputs when args.strings is provided."""
+        args = MagicMock()
+        args.strings = ["SELECT 1", "SELECT 2"]
+        args.stdin = False
+        args.files = None
+
+        a, b, mode = load_inputs(args)
+
+        self.assertEqual(a, "SELECT 1")
+        self.assertEqual(b, "SELECT 2")
+        self.assertEqual(mode, "strings")
+
+    @patch('sql_compare.read_from_stdin_two_parts')
+    def test_load_inputs_stdin(self, mock_read_from_stdin):
+        """Test load_inputs when args.stdin is true."""
+        args = MagicMock()
+        args.strings = None
+        args.stdin = True
+        args.files = None
+
+        mock_read_from_stdin.return_value = ("SELECT A", "SELECT B")
+
+        a, b, mode = load_inputs(args)
+
+        self.assertEqual(a, "SELECT A")
+        self.assertEqual(b, "SELECT B")
+        self.assertEqual(mode, "stdin")
+        mock_read_from_stdin.assert_called_once()
+
+    @patch('sql_compare.safe_read_file')
+    def test_load_inputs_files(self, mock_safe_read_file):
+        """Test load_inputs when args.files is provided with exactly 2 files."""
+        args = MagicMock()
+        args.strings = None
+        args.stdin = False
+        args.files = ["file1.sql", "file2.sql"]
+
+        mock_safe_read_file.side_effect = ["SELECT F1", "SELECT F2"]
+
+        a, b, mode = load_inputs(args)
+
+        self.assertEqual(a, "SELECT F1")
+        self.assertEqual(b, "SELECT F2")
+        self.assertEqual(mode, "files")
+        self.assertEqual(mock_safe_read_file.call_count, 2)
+        mock_safe_read_file.assert_any_call("file1.sql")
+        mock_safe_read_file.assert_any_call("file2.sql")
+
+    def test_load_inputs_none(self):
+        """Test load_inputs when no valid arguments are provided."""
+        args = MagicMock()
+        args.strings = None
+        args.stdin = False
+        args.files = None
+
+        a, b, mode = load_inputs(args)
+
+        self.assertIsNone(a)
+        self.assertIsNone(b)
+        self.assertIsNone(mode)
+
+    def test_load_inputs_invalid_files_length(self):
+        """Test load_inputs when args.files does not contain exactly 2 files."""
+        args = MagicMock()
+        args.strings = None
+        args.stdin = False
+        args.files = ["file1.sql"]
+
+        a, b, mode = load_inputs(args)
+
+        self.assertIsNone(a)
+        self.assertIsNone(b)
+        self.assertIsNone(mode)
+
+
 if __name__ == '__main__':
     unittest.main()
