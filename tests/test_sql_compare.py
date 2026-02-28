@@ -1,5 +1,6 @@
 import unittest
 from sql_compare import strip_sql_comments
+from sql_compare import canonicalize_joins
 
 class TestStripSQLComments(unittest.TestCase):
     def test_basic_line_comment(self):
@@ -68,54 +69,68 @@ class TestStripSQLComments(unittest.TestCase):
         expected = "SELECT 'It''s a comment -- no'"
         self.assertEqual(strip_sql_comments(sql), expected)
 
-if __name__ == '__main__':
-    unittest.main()
-
-from sql_compare import canonicalize_joins
-
 class TestCanonicalizeJoins(unittest.TestCase):
-    def test_canonicalize_joins_no_joins(self):
-        sql = "SELECT * FROM t1"
-        self.assertEqual(canonicalize_joins(sql), sql)
-
-    def test_canonicalize_joins_single_join(self):
-        sql = "SELECT * FROM t1 INNER JOIN t2 ON t1.id = t2.id"
-        self.assertEqual(canonicalize_joins(sql), "SELECT * FROM t1 JOIN t2 ON t1.id = t2.id")
-
-    def test_canonicalize_joins_reorder_inner(self):
-        sql = "SELECT * FROM t1 INNER JOIN t3 ON t1.id = t3.id INNER JOIN t2 ON t1.id = t2.id"
-        expected = "SELECT * FROM t1 JOIN t2 ON t1.id = t2.id JOIN t3 ON t1.id = t3.id"
+    def test_basic_inner_join_reorder(self):
+        """Inner joins should be reordered alphabetically by table name."""
+        sql = "SELECT * FROM t1 JOIN t3 ON t1.id=t3.id JOIN t2 ON t1.id=t2.id"
+        expected = "SELECT * FROM t1 JOIN t2 ON t1.id=t2.id JOIN t3 ON t1.id=t3.id"
         self.assertEqual(canonicalize_joins(sql), expected)
 
-    def test_canonicalize_joins_reorder_cross(self):
+    def test_explicit_inner_join_reorder(self):
+        """INNER JOIN keywords should be treated same as JOIN."""
+        sql = "SELECT * FROM t1 INNER JOIN t3 ON t1.id=t3.id INNER JOIN t2 ON t1.id=t2.id"
+        expected = "SELECT * FROM t1 JOIN t2 ON t1.id=t2.id JOIN t3 ON t1.id=t3.id"
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_left_join_no_reorder(self):
+        """Left joins should NOT be reordered by default."""
+        sql = "SELECT * FROM t1 LEFT JOIN t3 ON t1.id=t3.id LEFT JOIN t2 ON t1.id=t2.id"
+        self.assertEqual(canonicalize_joins(sql), sql)
+
+    def test_left_join_allow_reorder(self):
+        """Left joins SHOULD be reordered if allow_left is True."""
+        sql = "SELECT * FROM t1 LEFT JOIN t3 ON t1.id=t3.id LEFT JOIN t2 ON t1.id=t2.id"
+        expected = "SELECT * FROM t1 LEFT JOIN t2 ON t1.id=t2.id LEFT JOIN t3 ON t1.id=t3.id"
+        self.assertEqual(canonicalize_joins(sql, allow_left=True), expected)
+
+    def test_mixed_joins_barrier(self):
+        """Reorderable joins should not cross non-reorderable join barriers."""
+        # t3 and t2 are INNER (reorderable), t4 is LEFT (barrier)
+        sql = "SELECT * FROM t1 JOIN t3 ON x JOIN t2 ON y LEFT JOIN t4 ON z"
+        # t3 and t2 should swap.
+        expected = "SELECT * FROM t1 JOIN t2 ON y JOIN t3 ON x LEFT JOIN t4 ON z"
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_mixed_joins_barrier_2(self):
+        """Reorderable joins should not cross non-reorderable join barriers (case 2)."""
+        # t1 -> LEFT t2 -> JOIN t4 -> JOIN t3
+        # t4 and t3 are after the barrier t2. They should be reordered among themselves.
+        sql = "SELECT * FROM t1 LEFT JOIN t2 ON x JOIN t4 ON y JOIN t3 ON z"
+        expected = "SELECT * FROM t1 LEFT JOIN t2 ON x JOIN t3 ON z JOIN t4 ON y"
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_full_outer_join_no_reorder(self):
+        """FULL OUTER joins should NOT be reordered by default."""
+        sql = "SELECT * FROM t1 FULL JOIN t3 ON x FULL JOIN t2 ON y"
+        self.assertEqual(canonicalize_joins(sql), sql)
+
+    def test_full_outer_join_allow_reorder(self):
+        """FULL OUTER joins SHOULD be reordered if allow_full_outer is True."""
+        sql = "SELECT * FROM t1 FULL JOIN t3 ON x FULL JOIN t2 ON y"
+        expected = "SELECT * FROM t1 FULL JOIN t2 ON y FULL JOIN t3 ON x"
+        self.assertEqual(canonicalize_joins(sql, allow_full_outer=True), expected)
+
+    def test_cross_join_reorder(self):
+        """CROSS JOIN should be reordered."""
         sql = "SELECT * FROM t1 CROSS JOIN t3 CROSS JOIN t2"
         expected = "SELECT * FROM t1 CROSS JOIN t2 CROSS JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
 
-    def test_canonicalize_joins_reorder_natural(self):
+    def test_natural_join_reorder(self):
+        """NATURAL JOIN should be reordered."""
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
 
-    def test_canonicalize_joins_mixed_reorderable(self):
-        sql = "SELECT * FROM t1 CROSS JOIN t3 INNER JOIN t2 ON t1.id = t2.id"
-        expected = "SELECT * FROM t1 CROSS JOIN t3 JOIN t2 ON t1.id = t2.id"
-        self.assertEqual(canonicalize_joins(sql), expected)
-
-    def test_canonicalize_joins_not_reordered(self):
-        sql = "SELECT * FROM t1 LEFT JOIN t3 ON t1.id = t3.id INNER JOIN t2 ON t1.id = t2.id"
-        self.assertEqual(canonicalize_joins(sql), "SELECT * FROM t1 LEFT JOIN t3 ON t1.id = t3.id JOIN t2 ON t1.id = t2.id")
-
-    def test_canonicalize_joins_full_outer_allowed(self):
-        sql = "SELECT * FROM t1 FULL OUTER JOIN t3 ON t1.id = t3.id FULL OUTER JOIN t2 ON t1.id = t2.id"
-        expected = "SELECT * FROM t1 FULL JOIN t2 ON t1.id = t2.id FULL JOIN t3 ON t1.id = t3.id"
-        self.assertEqual(canonicalize_joins(sql, allow_full_outer=True), expected)
-
-    def test_canonicalize_joins_left_allowed(self):
-        sql = "SELECT * FROM t1 LEFT JOIN t3 ON t1.id = t3.id LEFT JOIN t2 ON t1.id = t2.id"
-        expected = "SELECT * FROM t1 LEFT JOIN t2 ON t1.id = t2.id LEFT JOIN t3 ON t1.id = t3.id"
-        self.assertEqual(canonicalize_joins(sql, allow_left=True), expected)
-
-    def test_canonicalize_joins_right_never_reordered(self):
-        sql = "SELECT * FROM t1 RIGHT JOIN t3 ON t1.id = t3.id RIGHT JOIN t2 ON t1.id = t2.id"
-        self.assertEqual(canonicalize_joins(sql), sql)
+if __name__ == '__main__':
+    unittest.main()
