@@ -1,5 +1,6 @@
 import unittest
-from sql_compare import canonicalize_joins
+from unittest.mock import patch, MagicMock
+from sql_compare import canonicalize_joins, safe_read_file, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +70,28 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+class TestUtilities(unittest.TestCase):
+    @patch('sql_compare.Path.exists')
+    @patch('sql_compare.Path.stat')
+    def test_safe_read_file_too_large(self, mock_stat, mock_exists):
+        """safe_read_file should raise ValueError if the file is larger than MAX_FILE_SIZE_BYTES."""
+        mock_exists.return_value = True
+
+        # Create a mock stat result with st_size larger than MAX_FILE_SIZE_BYTES
+        mock_stat_result = MagicMock()
+        mock_stat_result.st_size = MAX_FILE_SIZE_BYTES + 1024 * 1024  # Add 1 MB to ensure it exceeds limit
+        mock_stat.return_value = mock_stat_result
+
+        path_str = "dummy_large_file.sql"
+
+        with self.assertRaises(ValueError) as context:
+            safe_read_file(path_str)
+
+        expected_size_mb = mock_stat_result.st_size / (1024 * 1024)
+        expected_msg = f"File too large: {path_str} ({expected_size_mb:.2f} MB). Limit is {MAX_FILE_SIZE_MB} MB."
+        self.assertEqual(str(context.exception), expected_msg)
 
 if __name__ == '__main__':
     unittest.main()
