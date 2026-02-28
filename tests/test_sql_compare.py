@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, parse_args
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -70,5 +70,22 @@ class TestCanonicalizeJoins(unittest.TestCase):
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
 
+
+class TestParseArgs(unittest.TestCase):
+    def test_parse_args_no_arguments(self):
+        """parse_args with no arguments should return default values."""
+        args = parse_args([])
+        self.assertEqual(args.files, [])
+        self.assertIsNone(args.strings)
+        self.assertFalse(args.stdin)
+        self.assertEqual(args.mode, 'both')
+        self.assertFalse(args.ignore_whitespace)
+        self.assertTrue(args.join_reorder)
+        self.assertFalse(args.allow_full_outer_reorder)
+        self.assertFalse(args.allow_left_reorder)
+        self.assertIsNone(args.report)
+        self.assertEqual(args.report_format, 'html')
+
 if __name__ == '__main__':
+
     unittest.main()
