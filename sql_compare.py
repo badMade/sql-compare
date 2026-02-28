@@ -25,6 +25,7 @@ import argparse
 import difflib
 import os
 import re
+import itertools
 import sys
 from pathlib import Path
 
@@ -247,7 +248,7 @@ def top_level_find_kw(sql: str, kw: str, start: int = 0):
             elif ch == ')':
                 level = max(0, level - 1)
             if level == 0:
-                m = re.match(rf"\b{re.escape(kw)}\b", sql[i:])
+                m = re.match(rf"\b{re.escape(kw)}\b", sql[i:], re.IGNORECASE)
                 if m: return i
         else:
             if mode == 'single' and ch == "'":
