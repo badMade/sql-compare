@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, collapse_whitespace
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +69,25 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+class TestCollapseWhitespace(unittest.TestCase):
+    def test_basic_spaces(self):
+        """Test collapsing multiple spaces, including leading/trailing."""
+        self.assertEqual(collapse_whitespace("  hello   world  "), "hello world")
+
+    def test_mixed_whitespace(self):
+        """Test collapsing tabs, newlines, and carriage returns."""
+        self.assertEqual(collapse_whitespace("\t\thello\n\n\rworld\t \n"), "hello world")
+
+    def test_already_collapsed(self):
+        """Test that already collapsed strings remain unchanged."""
+        self.assertEqual(collapse_whitespace("hello world"), "hello world")
+
+    def test_empty_or_whitespace_only(self):
+        """Test empty strings and strings with only whitespace."""
+        self.assertEqual(collapse_whitespace(""), "")
+        self.assertEqual(collapse_whitespace(" \t\n\r "), "")
 
 if __name__ == '__main__':
     unittest.main()

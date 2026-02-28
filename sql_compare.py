@@ -21,6 +21,7 @@ CLI Examples:
   type queries.txt | python sql_compare.py --stdin --mode canonical --allow-full-outer-reorder --allow-left-reorder
 """
 
+import itertools
 import argparse
 import difflib
 import os
