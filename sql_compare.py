@@ -1,3 +1,4 @@
+import itertools
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -196,6 +197,11 @@ TOKEN_REGEX = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
+
+# JOIN Keywords Regex
+JOIN_REGEX = re.compile(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", flags=re.I)
+CONDKW_REGEX = re.compile(r"\b(ON|USING)\b", flags=re.I)
+
 def tokenize(sql: str):
     return [m.group(0) for m in TOKEN_REGEX.finditer(sql) if not m.group(0).isspace()]
 
@@ -361,17 +367,17 @@ def _parse_from_clause_body(body: str):
             elif ch == ')':
                 level = max(0, level - 1)
             if level == 0:
-                m = re.match(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", body[i:], flags=re.I)
+                m = JOIN_REGEX.match(body, i)
                 if m:
                     flush_buf()
                     tokens.append(("JOINKW", collapse_whitespace(m.group(1)).upper()))
-                    i += m.end()
+                    i = m.end()
                     continue
-                m2 = re.match(r"\b(ON|USING)\b", body[i:], flags=re.I)
+                m2 = CONDKW_REGEX.match(body, i)
                 if m2:
                     flush_buf()
                     tokens.append(("CONDKW", m2.group(1).upper()))
-                    i += m2.end()
+                    i = m2.end()
                     continue
         else:
             if mode == 'single' and ch == "'":
