@@ -70,5 +70,45 @@ class TestCanonicalizeJoins(unittest.TestCase):
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
 
+
+
+import tempfile
+import os
+from unittest.mock import patch
+from sql_compare import safe_read_file
+
+class TestSafeReadFile(unittest.TestCase):
+    def test_safe_read_file_success(self):
+        """Test reading a file successfully."""
+        with tempfile.NamedTemporaryFile(delete=False, mode='w', encoding='utf-8') as f:
+            f.write("SELECT * FROM test;")
+            temp_path = f.name
+
+        try:
+            content = safe_read_file(temp_path)
+            self.assertEqual(content, "SELECT * FROM test;")
+        finally:
+            os.remove(temp_path)
+
+    def test_safe_read_file_not_found(self):
+        """Test reading a non-existent file raises FileNotFoundError."""
+        with self.assertRaises(FileNotFoundError):
+            safe_read_file("non_existent_file_12345.sql")
+
+    @patch('sql_compare.MAX_FILE_SIZE_BYTES', 10)
+    @patch('sql_compare.MAX_FILE_SIZE_MB', 0.00001)
+    def test_safe_read_file_too_large(self):
+        """Test reading a file larger than the limit raises ValueError."""
+        with tempfile.NamedTemporaryFile(delete=False, mode='w', encoding='utf-8') as f:
+            f.write("This file is definitely longer than 10 bytes.")
+            temp_path = f.name
+
+        try:
+            with self.assertRaises(ValueError) as context:
+                safe_read_file(temp_path)
+            self.assertIn("File too large", str(context.exception))
+        finally:
+            os.remove(temp_path)
+
 if __name__ == '__main__':
     unittest.main()
