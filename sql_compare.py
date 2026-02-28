@@ -30,6 +30,7 @@ from pathlib import Path
 
 SQL_CLAUSE_TERMINATORS = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"]
 from collections import Counter
+import itertools
 WHITESPACE_REGEX = re.compile(r'\s+')
 
 

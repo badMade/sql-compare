@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, canonicalize_common
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +69,28 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+class TestCanonicalizeCommon(unittest.TestCase):
+    def test_full_canonicalization(self):
+        sql = "SELECT b, a FROM t1 JOIN t3 ON t1.id=t3.id JOIN t2 ON t1.id=t2.id WHERE y = 2 AND x = 1"
+        expected = "SELECT a, b FROM t1 JOIN t2 ON t1.id=t2.id JOIN t3 ON t1.id=t3.id WHERE x = 1 AND y = 2"
+        self.assertEqual(canonicalize_common(sql), expected)
+
+    def test_whitespace_collapse(self):
+        sql = "SELECT    b,    a   \nFROM t1  \n\n WHERE y=2   AND  x=1"
+        expected = "SELECT a, b FROM t1 WHERE x=1 AND y=2"
+        self.assertEqual(canonicalize_common(sql), expected)
+
+    def test_disable_join_reorder(self):
+        sql = "SELECT b, a FROM t1 JOIN t3 ON t1.id=t3.id JOIN t2 ON t1.id=t2.id WHERE y = 2 AND x = 1"
+        # Join remains out of order, others are ordered
+        expected = "SELECT a, b FROM t1 JOIN t3 ON t1.id=t3.id JOIN t2 ON t1.id=t2.id WHERE x = 1 AND y = 2"
+        self.assertEqual(canonicalize_common(sql, enable_join_reorder=False), expected)
+
+    def test_pass_flags_to_join_reorder(self):
+        sql = "SELECT b, a FROM t1 LEFT JOIN t3 ON t1.id=t3.id LEFT JOIN t2 ON t1.id=t2.id WHERE y = 2 AND x = 1"
+        expected = "SELECT a, b FROM t1 LEFT JOIN t2 ON t1.id=t2.id LEFT JOIN t3 ON t1.id=t3.id WHERE x = 1 AND y = 2"
+        self.assertEqual(canonicalize_common(sql, allow_left=True), expected)
 
 if __name__ == '__main__':
     unittest.main()
