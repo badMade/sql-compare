@@ -27,43 +27,20 @@ import os
 import re
 import sys
 from pathlib import Path
-
-SQL_CLAUSE_TERMINATORS = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"]
 from collections import Counter
-WHITESPACE_REGEX = re.compile(r'\s+')
-
-
 
 # --- Optional GUI imports guarded ---
-
 try:
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
     TK_AVAILABLE = True
 except Exception:
     TK_AVAILABLE = False
-CLAUSE_TERMINATORS = (
-    "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
-    "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"
-)
 
+
+# =============================
 # Normalization & Utilities
 # =============================
-
-MAX_FILE_SIZE_MB = 20
-MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
-
-def safe_read_file(path_str: str) -> str:
-    """Read a file safely, enforcing a size limit to prevent DoS."""
-    p = Path(path_str)
-    if not p.exists():
-        raise FileNotFoundError(f"File not found: {path_str}")
-
-    size = p.stat().st_size
-    if size > MAX_FILE_SIZE_BYTES:
-        raise ValueError(f"File too large: {path_str} ({size / (1024*1024):.2f} MB). Limit is {MAX_FILE_SIZE_MB} MB.")
-
-    return p.read_text(encoding="utf-8", errors="ignore")
 
 def strip_sql_comments(s: str) -> str:
     """
@@ -112,29 +89,22 @@ def strip_sql_comments(s: str) -> str:
             # Inside a quote/bracket
             out.append(ch)
 
-            if mode == 'single':
-                if ch == "'":
-                    # Check for escaped single quote ''
-                    if i + 1 < n and s[i+1] == "'":
-                        out.append(s[i+1])
-                        i += 2
-                        continue
-                    else:
-                        mode = None
-            elif mode == 'double':
-                if ch == '"':
-                    # Check for escaped double quote ""
-                    if i + 1 < n and s[i+1] == '"':
-                        out.append(s[i+1])
-                        i += 2
-                        continue
-                    else:
-                        mode = None
-            elif mode == 'bracket':
-                if ch == ']':
-                    mode = None
-            elif mode == 'backtick':
-                if ch == '`':
+            end_char_map = {
+                'single': "'",
+                'double': '"',
+                'bracket': ']',
+                'backtick': '`',
+            }
+            escapable_modes = {'single', 'double'}
+
+            if ch == end_char_map.get(mode):
+                if mode in escapable_modes and i + 1 < n and s[i+1] == ch:
+                    # Escaped quote like '' or ""
+                    out.append(s[i+1])
+                    i += 2
+                    continue
+                else:
+                    # End of quoted section
                     mode = None
 
             i += 1
@@ -144,7 +114,7 @@ def strip_sql_comments(s: str) -> str:
 
 def collapse_whitespace(s: str) -> str:
     """Collapse runs of whitespace to a single space and strip."""
-    return WHITESPACE_REGEX.sub(" ", s).strip()
+    return re.sub(r"\s+", " ", s).strip()
 
 
 def uppercase_outside_quotes(s: str) -> str:
@@ -336,9 +306,10 @@ def clause_end_index(sql: str, start: int) -> int:
     """
     Find end index for a clause (FROM or WHERE) to the next top-level major keyword.
     """
-    terms = CLAUSE_TERMINATORS
+    terms = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW",
+             "UNION", "INTERSECT", "EXCEPT"]
     ends = []
-    for term in SQL_CLAUSE_TERMINATORS:
+    for term in terms:
         idx = top_level_find_kw(sql, term, start)
         if idx != -1: ends.append(idx)
     return min(ends) if ends else len(sql)
@@ -491,14 +462,10 @@ def _parse_from_clause_body(body: str):
 
         seg_type = join_kw.replace(" OUTER", "")
         seg_type = seg_type.upper()
-        if seg_type.endswith(" JOIN"):
-            seg_type = seg_type[:-5]
-        elif seg_type == "JOIN":
-            seg_type = ""
-        seg_type = seg_type.strip()
+        seg_type = seg_type.replace(" JOIN", "").strip()
         if seg_type == "":
             seg_type = "INNER"
-            seg_type = "INNER"
+
         segments.append({
             "type": seg_type,
             "table": collapse_whitespace(table_text),
@@ -553,13 +520,18 @@ def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: boo
         return False
 
     new_segments = []
-    for is_reo, group in itertools.groupby(segments, key=lambda seg: is_reorderable(seg["type"])):
-        group_list = list(group)
-        if is_reo:
-            group_list.sort(key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
-            new_segments.extend(group_list)
+    run = []
+    for seg in segments:
+        if is_reorderable(seg["type"]):
+            run.append(seg)
         else:
-            new_segments.extend(group_list)
+            if run:
+                run = sorted(run, key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
+                new_segments.extend(run); run = []
+            new_segments.append(seg)
+    if run:
+        run = sorted(run, key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
+        new_segments.extend(run)
 
     rebuilt = _rebuild_from_body(base, new_segments)
     s2 = s[:from_i + 4] + " " + rebuilt + " " + s[end_i:]
@@ -788,8 +760,8 @@ def load_inputs(args):
         return a, b, "stdin"
     if args.files and len(args.files) == 2:
         f1, f2 = args.files
-        a = safe_read_file(f1)
-        b = safe_read_file(f2)
+        a = Path(f1).read_text(encoding="utf-8", errors="ignore")
+        b = Path(f2).read_text(encoding="utf-8", errors="ignore")
         return a, b, "files"
     return None, None, None
 
@@ -1009,8 +981,8 @@ class SQLCompareGUI:
         if not os.path.exists(p1) or not os.path.exists(p2):
             messagebox.showerror("File error", "One or both files do not exist."); return
         try:
-            a = safe_read_file(p1)
-            b = safe_read_file(p2)
+            a = Path(p1).read_text(encoding="utf-8", errors="ignore")
+            b = Path(p2).read_text(encoding="utf-8", errors="ignore")
             result = compare_sql(
                 a, b,
                 ignore_ws=self.ignore_ws.get(),
