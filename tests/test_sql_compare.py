@@ -1,5 +1,8 @@
 import unittest
-from sql_compare import canonicalize_joins
+import os
+import tempfile
+import unittest.mock
+from sql_compare import canonicalize_joins, safe_read_file
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +72,34 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+class TestSafeReadFile(unittest.TestCase):
+    def test_safe_read_file_success(self):
+        with tempfile.NamedTemporaryFile(delete=False, mode='w', encoding='utf-8') as f:
+            f.write("test content")
+            temp_path = f.name
+
+        try:
+            content = safe_read_file(temp_path)
+            self.assertEqual(content, "test content")
+        finally:
+            os.remove(temp_path)
+
+    def test_safe_read_file_not_found(self):
+        with self.assertRaises(FileNotFoundError):
+            safe_read_file("nonexistent_file_path_xyz.sql")
+
+    def test_safe_read_file_too_large(self):
+        with tempfile.NamedTemporaryFile(delete=False, mode='w', encoding='utf-8') as f:
+            f.write("this is more than 10 bytes")
+            temp_path = f.name
+
+        try:
+            with unittest.mock.patch('sql_compare.MAX_FILE_SIZE_BYTES', 10):
+                with self.assertRaisesRegex(ValueError, "File too large"):
+                    safe_read_file(temp_path)
+        finally:
+            os.remove(temp_path)
 
 if __name__ == '__main__':
     unittest.main()
