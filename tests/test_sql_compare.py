@@ -1,5 +1,54 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, split_top_level
+
+class TestSplitTopLevel(unittest.TestCase):
+    def test_basic_split(self):
+        """Basic split without quotes or brackets."""
+        self.assertEqual(split_top_level("a, b, c", ","), ["a", "b", "c"])
+        self.assertEqual(split_top_level("a AND b AND c", " AND "), ["a", "b", "c"])
+
+    def test_parentheses(self):
+        """Split should ignore separators inside parentheses."""
+        self.assertEqual(split_top_level("a, (b, c), d", ","), ["a", "(b, c)", "d"])
+        self.assertEqual(split_top_level("a AND (b AND c) AND d", " AND "), ["a", "(b AND c)", "d"])
+
+    def test_single_quotes(self):
+        """Split should ignore separators inside single quotes."""
+        self.assertEqual(split_top_level("a, 'b, c', d", ","), ["a", "'b, c'", "d"])
+
+    def test_double_quotes(self):
+        """Split should ignore separators inside double quotes."""
+        self.assertEqual(split_top_level('a, "b, c", d', ","), ["a", '"b, c"', "d"])
+
+    def test_brackets(self):
+        """Split should ignore separators inside square brackets."""
+        self.assertEqual(split_top_level("a, [b, c], d", ","), ["a", "[b, c]", "d"])
+
+    def test_backticks(self):
+        """Split should ignore separators inside backticks."""
+        self.assertEqual(split_top_level("a, `b, c`, d", ","), ["a", "`b, c`", "d"])
+
+    def test_escaped_quotes(self):
+        """Split should handle escaped quotes correctly."""
+        # 'b, ''c, d'', e' should be a single string.
+        self.assertEqual(split_top_level("a, 'b, ''c, d'', e', f", ","), ["a", "'b, ''c, d'', e'", "f"])
+        self.assertEqual(split_top_level('a, "b, ""c, d"", e", f', ","), ["a", '"b, ""c, d"", e"', "f"])
+
+    def test_nested_structures(self):
+        """Split should handle nested parentheses and quotes."""
+        self.assertEqual(split_top_level("(a, 'b, c', (d, e))", ","), ["(a, 'b, c', (d, e))"])
+
+    def test_empty_strings(self):
+        """Empty strings between consecutive separators should be dropped."""
+        self.assertEqual(split_top_level("a,,b,,,c", ","), ["a", "b", "c"])
+        self.assertEqual(split_top_level("  , a, b ,  ", ","), ["a", "b"])
+
+    def test_unmatched_structures(self):
+        """Should gracefully handle unmatched quotes/parentheses."""
+        # Unmatched open parenthesis: it never goes back to level 0.
+        self.assertEqual(split_top_level("a, (b, c", ","), ["a", "(b, c"])
+        # Unmatched quote: it stays in string mode till the end.
+        self.assertEqual(split_top_level("a, 'b, c", ","), ["a", "'b, c"])
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -49,13 +98,7 @@ class TestCanonicalizeJoins(unittest.TestCase):
     def test_full_outer_join_allow_reorder(self):
         """FULL OUTER joins SHOULD be reordered if allow_full_outer is True."""
         sql = "SELECT * FROM t1 FULL JOIN t3 ON x FULL JOIN t2 ON y"
-        # Note: 'FULL JOIN' is normalized to 'FULL JOIN' (OUTER is optional/removed if not handled?)
-        # Let's check implementation: seg_type replaces " OUTER", so "FULL OUTER JOIN" -> "FULL JOIN".
-        # Then _rebuild uses seg_type + " JOIN". So "FULL JOIN".
-        # If input has "FULL OUTER JOIN", output will have "FULL JOIN".
-        # We should expect "FULL JOIN".
         expected = "SELECT * FROM t1 FULL JOIN t2 ON y FULL JOIN t3 ON x"
-        # However, if input is already "FULL JOIN", it stays "FULL JOIN".
         self.assertEqual(canonicalize_joins(sql, allow_full_outer=True), expected)
 
     def test_cross_join_reorder(self):
