@@ -43,10 +43,80 @@ except Exception:
 # =============================
 
 def strip_sql_comments(s: str) -> str:
-    """Remove -- line comments and /* ... */ block comments (non-nested)."""
-    s = re.sub(r"/\*.*?\*/", "", s, flags=re.S)
-    s = re.sub(r"--[^\n\r]*", "", s)
-    return s
+    """
+    Remove -- line comments and /* ... */ block comments (non-nested),
+    preserving comments inside quotes/brackets/backticks.
+    """
+    out = []
+    i = 0
+    n = len(s)
+    mode = None  # None, 'single', 'double', 'bracket', 'backtick'
+
+    while i < n:
+        ch = s[i]
+        if mode is None:
+            # Check for start of comments
+            if s.startswith('--', i):
+                # Consume line comment
+                i += 2
+                while i < n and s[i] not in ('\n', '\r'):
+                    i += 1
+                continue
+            elif s.startswith('/*', i):
+                # Consume block comment
+                i += 2
+                while i < n:
+                    if s.startswith('*/', i):
+                        i += 2
+                        break
+                    i += 1
+                continue
+
+            # Check for start of quotes
+            if ch == "'":
+                mode = 'single'
+            elif ch == '"':
+                mode = 'double'
+            elif ch == '[':
+                mode = 'bracket'
+            elif ch == '`':
+                mode = 'backtick'
+
+            out.append(ch)
+            i += 1
+
+        else:
+            # Inside a quote/bracket
+            out.append(ch)
+
+            if mode == 'single':
+                if ch == "'":
+                    # Check for escaped single quote ''
+                    if i + 1 < n and s[i+1] == "'":
+                        out.append(s[i+1])
+                        i += 2
+                        continue
+                    else:
+                        mode = None
+            elif mode == 'double':
+                if ch == '"':
+                    # Check for escaped double quote ""
+                    if i + 1 < n and s[i+1] == '"':
+                        out.append(s[i+1])
+                        i += 2
+                        continue
+                    else:
+                        mode = None
+            elif mode == 'bracket':
+                if ch == ']':
+                    mode = None
+            elif mode == 'backtick':
+                if ch == '`':
+                    mode = None
+
+            i += 1
+
+    return "".join(out)
 
 
 def collapse_whitespace(s: str) -> str:
