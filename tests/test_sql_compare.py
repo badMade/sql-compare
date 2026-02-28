@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, tokenize
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +69,61 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+class TestTokenize(unittest.TestCase):
+    def test_basic_query(self):
+        """Tokenize basic SELECT query."""
+        sql = "SELECT a, b FROM table1 WHERE id = 1"
+        expected = ['SELECT', 'a', ',', 'b', 'FROM', 'table1', 'WHERE', 'id', '=', '1']
+        self.assertEqual(tokenize(sql), expected)
+
+    def test_quoted_strings(self):
+        """Tokenize single and double quoted strings, including E-strings."""
+        # Note: E'...' parses as E, '...' while E"..." parses as E"..."
+        sql = "SELECT 'string', E'string2', \"col 1\", E\"esc\""
+        expected = ['SELECT', "'string'", ',', 'E', "'string2'", ',', '"col 1"', ',', 'E"esc"']
+        self.assertEqual(tokenize(sql), expected)
+
+    def test_escaped_single_quotes(self):
+        """Tokenize strings with escaped single quotes."""
+        # Note: 'it''s' is parsed as 'it', 's' by the regex currently.
+        # We test the current behavior to ensure no unexpected regressions.
+        sql = "SELECT 'it''s'"
+        expected = ['SELECT', "'it'", "'s'"]
+        self.assertEqual(tokenize(sql), expected)
+
+    def test_identifiers_brackets_backticks(self):
+        """Tokenize bracketed and backticked identifiers."""
+        sql = "SELECT [my table], `my col`"
+        expected = ['SELECT', '[my table]', ',', '`my col`']
+        self.assertEqual(tokenize(sql), expected)
+
+    def test_numbers(self):
+        """Tokenize integer and float numbers."""
+        sql = "SELECT 123, 45.67"
+        expected = ['SELECT', '123', ',', '45.67']
+        self.assertEqual(tokenize(sql), expected)
+
+    def test_multi_character_operators(self):
+        """Tokenize multi-character operators."""
+        sql = "SELECT a <= b, c >= d, e <> f, g != h, i := j, k -> l, m::n"
+        expected = ['SELECT', 'a', '<=', 'b', ',', 'c', '>=', 'd', ',',
+                    'e', '<>', 'f', ',', 'g', '!=', 'h', ',',
+                    'i', ':=', 'j', ',', 'k', '->', 'l', ',', 'm', '::', 'n']
+        self.assertEqual(tokenize(sql), expected)
+
+    def test_single_character_operators(self):
+        """Tokenize single-character operators and punctuation."""
+        sql = "SELECT a + b - c * d / e % f"
+        expected = ['SELECT', 'a', '+', 'b', '-', 'c', '*', 'd', '/', 'e', '%', 'f']
+        self.assertEqual(tokenize(sql), expected)
+
+    def test_whitespace_handling(self):
+        """Whitespace (spaces, tabs, newlines) should be ignored."""
+        sql = "SELECT \n\ta  \r\n  b"
+        expected = ['SELECT', 'a', 'b']
+        self.assertEqual(tokenize(sql), expected)
 
 if __name__ == '__main__':
     unittest.main()
