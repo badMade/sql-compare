@@ -25,6 +25,8 @@ import argparse
 import difflib
 import os
 import re
+import itertools
+
 import sys
 from pathlib import Path
 
