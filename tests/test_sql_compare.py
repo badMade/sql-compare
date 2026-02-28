@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, uppercase_outside_quotes
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +69,64 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+class TestUppercaseOutsideQuotes(unittest.TestCase):
+    def test_no_quotes(self):
+        """Basic strings without any quotes should be completely uppercased."""
+        self.assertEqual(uppercase_outside_quotes("select * from table"), "SELECT * FROM TABLE")
+        self.assertEqual(uppercase_outside_quotes("where id = 1"), "WHERE ID = 1")
+        self.assertEqual(uppercase_outside_quotes(""), "")
+
+    def test_single_quotes(self):
+        """Strings within single quotes should remain unchanged."""
+        self.assertEqual(uppercase_outside_quotes("select 'abc' from t"), "SELECT 'abc' FROM T")
+        self.assertEqual(uppercase_outside_quotes("where name = 'John Doe'"), "WHERE NAME = 'John Doe'")
+        self.assertEqual(uppercase_outside_quotes("'all lowercase'"), "'all lowercase'")
+
+    def test_double_quotes(self):
+        """Strings within double quotes should remain unchanged."""
+        self.assertEqual(uppercase_outside_quotes('select "col1" from t'), 'SELECT "col1" FROM T')
+        self.assertEqual(uppercase_outside_quotes('where id = "user_id"'), 'WHERE ID = "user_id"')
+        self.assertEqual(uppercase_outside_quotes('"all lowercase"'), '"all lowercase"')
+
+    def test_brackets(self):
+        """Strings within brackets should remain unchanged."""
+        self.assertEqual(uppercase_outside_quotes('select [col 1] from t'), 'SELECT [col 1] FROM T')
+        self.assertEqual(uppercase_outside_quotes('where id = [user id]'), 'WHERE ID = [user id]')
+
+    def test_backticks(self):
+        """Strings within backticks should remain unchanged."""
+        self.assertEqual(uppercase_outside_quotes('select `col 1` from t'), 'SELECT `col 1` FROM T')
+        self.assertEqual(uppercase_outside_quotes('where id = `user id`'), 'WHERE ID = `user id`')
+
+    def test_multiple_quotes(self):
+        """Combinations of different quotes should all be respected."""
+        self.assertEqual(
+            uppercase_outside_quotes('select `col 1`, [col 2] from t where name = \'John\' and "desc" = \'a"b\''),
+            'SELECT `col 1`, [col 2] FROM T WHERE NAME = \'John\' AND "desc" = \'a"b\''
+        )
+        self.assertEqual(
+            uppercase_outside_quotes('select \'a\' as "b", [c] as `d` from e'),
+            'SELECT \'a\' AS "b", [c] AS `d` FROM E'
+        )
+
+    def test_escaped_single_quotes(self):
+        """Escaped single quotes (double single quote) inside single quotes should be respected."""
+        self.assertEqual(uppercase_outside_quotes("select 'O''Reilly' from t"), "SELECT 'O''Reilly' FROM T")
+        self.assertEqual(uppercase_outside_quotes("where name = 'a''b''c'"), "WHERE NAME = 'a''b''c'")
+
+    def test_escaped_double_quotes(self):
+        """Escaped double quotes (double double quote) inside double quotes should be respected."""
+        self.assertEqual(uppercase_outside_quotes('select "a""b" from t'), 'SELECT "a""b" FROM T')
+        self.assertEqual(uppercase_outside_quotes('where id = "a""b"'), 'WHERE ID = "a""b"')
+
+    def test_unclosed_quotes(self):
+        """Unclosed quotes should not cause an error and should just run to the end of the string."""
+        self.assertEqual(uppercase_outside_quotes("select 'abc"), "SELECT 'abc")
+        self.assertEqual(uppercase_outside_quotes('select "abc'), 'SELECT "abc')
+        self.assertEqual(uppercase_outside_quotes('select [abc'), 'SELECT [abc')
+        self.assertEqual(uppercase_outside_quotes('select `abc'), 'SELECT `abc')
 
 if __name__ == '__main__':
     unittest.main()
