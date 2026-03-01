@@ -141,16 +141,18 @@ class TestLoadInputs(unittest.TestCase):
 
     def test_load_inputs_invalid_files_length(self):
         """Test load_inputs when args.files does not contain exactly 2 files."""
-        args = MagicMock()
-        args.strings = None
-        args.stdin = False
-        args.files = ["file1.sql"]
+        for file_list in ([], ["file1.sql"], ["f1.sql", "f2.sql", "f3.sql"]):
+            with self.subTest(files=file_list):
+                args = MagicMock()
+                args.strings = None
+                args.stdin = False
+                args.files = file_list
 
-        a, b, mode = load_inputs(args)
+                a, b, mode = load_inputs(args)
 
-        self.assertIsNone(a)
-        self.assertIsNone(b)
-        self.assertIsNone(mode)
+                self.assertIsNone(a)
+                self.assertIsNone(b)
+                self.assertIsNone(mode)
 
 
 if __name__ == '__main__':
