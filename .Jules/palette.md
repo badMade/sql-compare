@@ -1,0 +1,3 @@
+## 2024-05-24 - Empty States and Disabled Buttons in Tkinter
+**Learning:** When creating a GUI, users can become confused if actions are available when there's no data to act upon. Additionally, an empty text box doesn't give them a cue on what to do next. Managing Tkinter's disabled button states explicitly ensures valid user interaction flows, and inserting an empty state call-to-action into `tk.Text` widgets makes the app more approachable.
+**Action:** When building UIs, assign interactive elements (like buttons) to instance variables to easily toggle their `state(['disabled'])` / `state(['!disabled'])` depending on application state. Always pair empty states with helpful instructions instead of leaving a blank canvas.
