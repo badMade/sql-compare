@@ -99,9 +99,14 @@ class TestParseFromClauseBody(unittest.TestCase):
         sql = "t1 JOIN t2 USING (id, name) JOIN t3 ON t1.id = t3.id"
         base, segments = _parse_from_clause_body(sql)
         self.assertEqual(base, "t1")
-        self.assertEqual(len(segments), 2)
-        self.assertEqual(segments[0], {"type": "INNER", "table": "t2", "cond_kw": "USING", "cond": "(id, name)"})
-        self.assertEqual(segments[1], {"type": "INNER", "table": "t3", "cond_kw": "ON", "cond": "t1.id = t3.id"})
+        expected_segments = [
+            {"type": "INNER", "table": "t2", "cond_kw": "USING", "cond": "(id, name)"},
+            {"type": "INNER", "table": "t3", "cond_kw": "ON", "cond": "t1.id = t3.id"}
+        ]
+        self.assertEqual(len(segments), len(expected_segments))
+        for i, expected in enumerate(expected_segments):
+            with self.subTest(segment_index=i):
+                self.assertEqual(segments[i], expected)
 
     def test_quoted_identifiers(self):
         """Test that join keywords inside quoted identifiers are ignored."""
