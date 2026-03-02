@@ -865,16 +865,6 @@ class SQLCompareGUI:
 
     def _build_mode_frame(self, root, pad):
         # Backwards-compatible wrapper for mode controls.
-        self._create_mode_frame()
-
-    def _build_flags_frame(self, root, pad):
-        # Backwards-compatible wrapper for flag controls.
-        self._create_flags_frame()
-
-    def _build_buttons_frame(self, root, pad):
-        # Backwards-compatible wrapper for action buttons.
-        self._create_buttons_frame()
-
     def _build_output_frame(self, root, pad):
         # Backwards-compatible wrapper for output area.
         self._create_output_frame()
