@@ -23,7 +23,6 @@ CLI Examples:
 
 import itertools
 import argparse
-import itertools
 import difflib
 import os
 import re
