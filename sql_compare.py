@@ -21,6 +21,7 @@ CLI Examples:
   type queries.txt | python sql_compare.py --stdin --mode canonical --allow-full-outer-reorder --allow-left-reorder
 """
 
+import itertools
 import argparse
 import itertools
 import difflib
@@ -849,6 +850,20 @@ class SQLCompareGUI:
         root.title("SQL Compare")
         root.geometry("980x780")
 
+        self._init_vars()
+
+        pad = {"padx": 8, "pady": 6}
+        self._build_file_selection_frame(root, pad)
+        self._build_mode_frame(root, pad)
+        self._build_flags_frame(root, pad)
+        self._build_buttons_frame(root, pad)
+        self._build_output_frame(root, pad)
+
+        ttk.Label(root, text="Tip: CLI supports --strings/--stdin, --mode, --ignore-whitespace, --join-reorder/--no-join-reorder, --allow-full-outer-reorder, --allow-left-reorder, and --report.").pack(anchor="w", padx=8, pady=4)
+
+        self.last_result = None  # cache for report generation
+
+    def _init_vars(self):
         self.sql1_path = tk.StringVar()
         self.sql2_path = tk.StringVar()
         self.mode = tk.StringVar(value="both")
