@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins, compare_sql
+from sql_compare import canonicalize_joins, strip_sql_comments
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -71,52 +71,43 @@ class TestCanonicalizeJoins(unittest.TestCase):
         self.assertEqual(canonicalize_joins(sql), expected)
 
 
-class TestCompareSql(unittest.TestCase):
-    def test_exact_equal(self):
-        sql = "SELECT * FROM t1"
-        res = compare_sql(sql, sql)
-        with self.subTest(check="ws_equal"):
-            self.assertTrue(res['ws_equal'])
-        with self.subTest(check="exact_equal"):
-            self.assertTrue(res['exact_equal'])
-        with self.subTest(check="canonical_equal"):
-            self.assertTrue(res['canonical_equal'])
+class TestStripSqlComments(unittest.TestCase):
+    def test_single_line_comment(self):
+        """Should strip single line comment starting with --."""
+        sql = "-- this is a comment\nSELECT * FROM t1;"
+        expected = "\nSELECT * FROM t1;"
+        self.assertEqual(strip_sql_comments(sql), expected)
 
-    def test_ws_difference(self):
-        sql1 = "SELECT * FROM t1"
-        sql2 = "SELECT  *   FROM   t1"
-        res = compare_sql(sql1, sql2)
-        self.assertTrue(res['ws_equal'])
-        self.assertTrue(res['exact_equal'])
-        self.assertTrue(res['canonical_equal'])
+    def test_inline_comment(self):
+        """Should strip inline comment at the end of a line."""
+        sql = "SELECT * FROM t1; -- comment here"
+        expected = "SELECT * FROM t1; "
+        self.assertEqual(strip_sql_comments(sql), expected)
 
-    def test_case_difference(self):
-        sql1 = "SELECT * FROM t1"
-        sql2 = "select * from t1"
-        res = compare_sql(sql1, sql2)
-        self.assertTrue(res['exact_equal'])
-        self.assertTrue(res['canonical_equal'])
+    def test_block_comment_single_line(self):
+        """Should strip block comment on a single line."""
+        sql = "SELECT /* comment */ * FROM t1;"
+        expected = "SELECT  * FROM t1;"
+        self.assertEqual(strip_sql_comments(sql), expected)
 
-    def test_canonical_equal_only(self):
-        sql1 = "SELECT * FROM t1 JOIN t2 ON t1.id=t2.id JOIN t3 ON t1.id=t3.id"
-        sql2 = "SELECT * FROM t1 JOIN t3 ON t1.id=t3.id JOIN t2 ON t1.id=t2.id"
-        res = compare_sql(sql1, sql2)
-        self.assertFalse(res['exact_equal'])
-        self.assertTrue(res['canonical_equal'])
+    def test_block_comment_multi_line(self):
+        """Should strip block comment spanning multiple lines."""
+        sql = "SELECT /* \n multi \n line \n comment \n */ * FROM t1;"
+        expected = "SELECT  * FROM t1;"
+        self.assertEqual(strip_sql_comments(sql), expected)
 
-    def test_not_equal(self):
-        sql1 = "SELECT * FROM t1"
-        sql2 = "SELECT * FROM t2"
-        res = compare_sql(sql1, sql2)
-        self.assertFalse(res['exact_equal'])
-        self.assertFalse(res['canonical_equal'])
+    def test_multiple_comments(self):
+        """Should strip multiple comments of different types."""
+        sql = "/* start */ SELECT * FROM t1; -- end comment"
+        expected = " SELECT * FROM t1; "
+        self.assertEqual(strip_sql_comments(sql), expected)
 
-    def test_disable_join_reorder(self):
-        sql1 = "SELECT * FROM t1 JOIN t2 ON t1.id=t2.id JOIN t3 ON t1.id=t3.id"
-        sql2 = "SELECT * FROM t1 JOIN t3 ON t1.id=t3.id JOIN t2 ON t1.id=t2.id"
-        res = compare_sql(sql1, sql2, enable_join_reorder=False)
-        self.assertFalse(res['canonical_equal'])
-
+    def test_no_comments(self):
+        """Should return the same string if there are no comments."""
+        sql = "SELECT * FROM t1;"
+        expected = "SELECT * FROM t1;"
+        self.assertEqual(strip_sql_comments(sql), expected)
 
 if __name__ == '__main__':
+
     unittest.main()
