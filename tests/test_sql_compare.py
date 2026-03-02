@@ -75,9 +75,12 @@ class TestCompareSql(unittest.TestCase):
     def test_exact_equal(self):
         sql = "SELECT * FROM t1"
         res = compare_sql(sql, sql)
-        self.assertTrue(res['ws_equal'])
-        self.assertTrue(res['exact_equal'])
-        self.assertTrue(res['canonical_equal'])
+        with self.subTest(check="ws_equal"):
+            self.assertTrue(res['ws_equal'])
+        with self.subTest(check="exact_equal"):
+            self.assertTrue(res['exact_equal'])
+        with self.subTest(check="canonical_equal"):
+            self.assertTrue(res['canonical_equal'])
 
     def test_ws_difference(self):
         sql1 = "SELECT * FROM t1"
