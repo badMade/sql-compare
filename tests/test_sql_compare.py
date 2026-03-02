@@ -106,11 +106,12 @@ class TestBuildDifferenceSummary(unittest.TestCase):
         sql_b = "SELECT a FROM t WHERE x = 1 AND z = 3"
         summary = build_difference_summary(
             sql_a, sql_b, sql_a, sql_b,
-            [], [],
+            tokenize(sql_a), tokenize(sql_b),
             enable_join_reorder=True, allow_full_outer=False, allow_left=False
         )
         self.assertIn("WHERE AND terms differ: terms only in SQL1: 1", summary)
         self.assertIn("WHERE AND terms differ: terms only in SQL2: 1", summary)
+        self.assertTrue(any("Token-level changes" in s for s in summary))
 
     def test_where_order_differs(self):
         sql_a = "SELECT a FROM t WHERE x = 1 AND y = 2"
