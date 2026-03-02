@@ -34,6 +34,9 @@ SQL_CLAUSE_TERMINATORS = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "O
 from collections import Counter
 WHITESPACE_REGEX = re.compile(r'\s+')
 
+# Pre-compiled regexes for parsing (avoids O(N^2) string slicing)
+JOIN_REGEX = re.compile(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", flags=re.I)
+ON_USING_REGEX = re.compile(r"\b(ON|USING)\b", flags=re.I)
 
 
 # --- Optional GUI imports guarded ---
@@ -236,6 +239,7 @@ def split_top_level(s: str, sep: str) -> list:
 def top_level_find_kw(sql: str, kw: str, start: int = 0):
     """Find top-level occurrence of keyword kw (word boundary) starting at start."""
     kw = kw.upper()
+    kw_re = re.compile(rf"\b{re.escape(kw)}\b")
     i = start; mode = None; level = 0
     while i < len(sql):
         ch = sql[i]
@@ -249,7 +253,7 @@ def top_level_find_kw(sql: str, kw: str, start: int = 0):
             elif ch == ')':
                 level = max(0, level - 1)
             if level == 0:
-                m = re.match(rf"\b{re.escape(kw)}\b", sql[i:])
+                m = kw_re.match(sql, i)
                 if m: return i
         else:
             if mode == 'single' and ch == "'":
@@ -363,17 +367,17 @@ def _parse_from_clause_body(body: str):
             elif ch == ')':
                 level = max(0, level - 1)
             if level == 0:
-                m = re.match(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", body[i:], flags=re.I)
+                m = JOIN_REGEX.match(body, i)
                 if m:
                     flush_buf()
                     tokens.append(("JOINKW", collapse_whitespace(m.group(1)).upper()))
-                    i += m.end()
+                    i = m.end()
                     continue
-                m2 = re.match(r"\b(ON|USING)\b", body[i:], flags=re.I)
+                m2 = ON_USING_REGEX.match(body, i)
                 if m2:
                     flush_buf()
                     tokens.append(("CONDKW", m2.group(1).upper()))
-                    i += m2.end()
+                    i = m2.end()
                     continue
         else:
             if mode == 'single' and ch == "'":
