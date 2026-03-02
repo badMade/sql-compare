@@ -1,0 +1,3 @@
+## 2024-03-02 - [Empty States and Disabled Interactions]
+**Learning:** It's important to pair disabled interactive states with helpful UI cues (like empty states). Otherwise, users might not know why an action is unavailable. This was seen in the SQL Compare app where disabled "Copy Output", "Clear", and "Save Report" buttons are now paired with an initial message "Select two SQL files and click 'Compare' to view the differences here.".
+**Action:** When adding or managing disabled states for buttons, also consider what visual indicator or message can be provided to guide the user towards enabling that action.
