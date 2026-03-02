@@ -78,8 +78,10 @@ class TestCanonicalizeJoins(unittest.TestCase):
 class TestSafeReadFile(unittest.TestCase):
     def test_file_not_found(self):
         """Should raise FileNotFoundError if file does not exist."""
-        with self.assertRaises(FileNotFoundError):
-            safe_read_file("nonexistent_file_that_should_never_exist.sql")
+        with patch('sql_compare.Path') as MockPath:
+            MockPath.return_value.exists.return_value = False
+            with self.assertRaises(FileNotFoundError):
+                safe_read_file("any/dummy/path.sql")
 
     def test_file_too_large(self):
         """Should raise ValueError if file size exceeds MAX_FILE_SIZE_BYTES."""
