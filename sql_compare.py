@@ -893,7 +893,8 @@ class SQLCompareGUI:
         ttk.Checkbutton(frm_mode, text="Ignore whitespace differences", variable=self.ignore_ws).pack(side="left", padx=16)
 
     def _create_flags_frame(self, pad):
-        frm_flags = ttk.Frame(self.root); frm_flags.pack(fill="x", **pad)
+        frm_flags = ttk.Frame(self.root)
+        frm_flags.pack(fill="x", **pad)
         self.chk_enable_join = ttk.Checkbutton(frm_flags, text="Enable join reordering", variable=self.enable_join, command=self._toggle_join_options)
         self.chk_enable_join.pack(side="left", padx=6)
         self.chk_full = ttk.Checkbutton(frm_flags, text="Allow FULL OUTER JOIN reordering (heuristic)", variable=self.allow_full)
