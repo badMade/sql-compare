@@ -912,7 +912,8 @@ class SQLCompareGUI:
         ttk.Button(frm_btns, text="Save Report…", command=self.save_report).pack(side="left", padx=6)
 
     def _create_output_frame(self, pad):
-        frm_out = ttk.Frame(self.root); frm_out.pack(fill="both", expand=True, **pad)
+        frm_out = ttk.Frame(self.root)
+        frm_out.pack(fill="both", expand=True, **pad)
         self.txt = tk.Text(frm_out, wrap="none", font=("Consolas", 10))
         xscroll = ttk.Scrollbar(frm_out, orient="horizontal", command=self.txt.xview)
         yscroll = ttk.Scrollbar(frm_out, orient="vertical", command=self.txt.yview)
