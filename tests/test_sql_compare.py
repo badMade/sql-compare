@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, uppercase_outside_quotes
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +69,68 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+class TestUppercaseOutsideQuotes(unittest.TestCase):
+    def test_unquoted_text(self):
+        """Unquoted text should be fully uppercased."""
+        self.assertEqual(uppercase_outside_quotes("select * from t1;"), "SELECT * FROM T1;")
+
+    def test_single_quotes(self):
+        """Text inside single quotes should be preserved."""
+        self.assertEqual(uppercase_outside_quotes("select 'abc' from t1"), "SELECT 'abc' FROM T1")
+
+    def test_double_quotes(self):
+        """Text inside double quotes should be preserved."""
+        self.assertEqual(uppercase_outside_quotes('select "abc" from t1'), 'SELECT "abc" FROM T1')
+
+    def test_brackets(self):
+        """Text inside brackets should be preserved."""
+        self.assertEqual(uppercase_outside_quotes("select [abc] from t1"), "SELECT [abc] FROM T1")
+
+    def test_backticks(self):
+        """Text inside backticks should be preserved."""
+        self.assertEqual(uppercase_outside_quotes("select `abc` from t1"), "SELECT `abc` FROM T1")
+
+    def test_mixed_quotes(self):
+        """Text with multiple quote types should be processed correctly."""
+        self.assertEqual(
+            uppercase_outside_quotes("select 'a', \"b\", [c], `d` from t1"),
+            "SELECT 'a', \"b\", [c], `d` FROM T1"
+        )
+
+    def test_escaped_single_quotes(self):
+        """Escaped single quotes (double single quotes) inside single quotes should be handled."""
+        self.assertEqual(
+            uppercase_outside_quotes("select 'it''s a test' from t1"),
+            "SELECT 'it''s a test' FROM T1"
+        )
+
+    def test_escaped_double_quotes(self):
+        """Escaped double quotes (double double quotes) inside double quotes should be handled."""
+        self.assertEqual(
+            uppercase_outside_quotes('select "it""s a test" from t1'),
+            'SELECT "it""s a test" FROM T1'
+        )
+
+    def test_consecutive_quotes(self):
+        """Consecutive empty strings should be handled correctly."""
+        self.assertEqual(
+            uppercase_outside_quotes("select '', \"\", [], `` from t1"),
+            "SELECT '', \"\", [], `` FROM T1"
+        )
+
+    def test_unclosed_quotes(self):
+        """Unclosed quotes should be handled gracefully (preserve till end)."""
+        self.assertEqual(uppercase_outside_quotes("select 'abc"), "SELECT 'abc")
+        self.assertEqual(uppercase_outside_quotes('select "abc'), 'SELECT "abc')
+        self.assertEqual(uppercase_outside_quotes("select [abc"), "SELECT [abc")
+        self.assertEqual(uppercase_outside_quotes("select `abc"), "SELECT `abc")
+
+    def test_quotes_inside_quotes(self):
+        """Quotes of one type inside another type should be treated as literal text."""
+        self.assertEqual(uppercase_outside_quotes("select '\"abc\"' from t1"), "SELECT '\"abc\"' FROM T1")
+        self.assertEqual(uppercase_outside_quotes('select "\'\'abc\'\'" from t1'), 'SELECT "\'\'abc\'\'" FROM T1')
 
 if __name__ == '__main__':
     unittest.main()
