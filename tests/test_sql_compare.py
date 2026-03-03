@@ -109,7 +109,8 @@ class TestClauseEndIndex(unittest.TestCase):
         # The 'WHERE' inside quotes should be ignored. We should find 'WHERE' keyword
         self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
 
-        sql2 = "SELECT * FROM t1 JOIN u ON a = '[WHERE]' GROUP BY b"
+        sql2 = "SELECT * FROM t1 JOIN [WHERE] u ON a = b GROUP BY b"
+        # [WHERE] is a bracketed identifier; the parser enters mode='bracket' and ignores it
         self.assertEqual(clause_end_index(sql2, 0), sql2.index("GROUP BY"))
 
         sql3 = "SELECT * FROM t1 JOIN u ON a = `WHERE` GROUP BY b"
