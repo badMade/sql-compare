@@ -145,38 +145,48 @@ def remove_outer_parentheses(s: str) -> str:
     def is_wrapped(text: str) -> bool:
         if not (text.startswith("(") and text.endswith(")")):
             return False
-        level = 0; mode = None; i = 0
-        while i < len(text):
+        level = 0
+        mode = None
+        i = 0
+        n = len(text)
+        while i < n:
             ch = text[i]
-            if mode is None:
-                if ch == "'": mode = 'single'
-                elif ch == '"': mode = 'double'
-                elif ch == '[': mode = 'bracket'
-                elif ch == '`': mode = 'backtick'
-                elif ch == '(':
-                    level += 1
-                elif ch == ')':
-                    level -= 1
-                    if level == 0 and i != len(text) - 1:
-                        return False
-            elif mode == 'single':
-                if ch == "'":
-                    if i + 1 < len(text) and text[i + 1] == "'":
-                        i += 1
-                    else:
-                        mode = None
-            elif mode == 'double':
-                if ch == '"':
-                    if i + 1 < len(text) and text[i + 1] == '"':
-                        i += 1
-                    else:
-                        mode = None
-            elif mode == 'bracket':
-                if ch == ']': mode = None
-            elif mode == 'backtick':
-                if ch == '`': mode = None
+
+            if mode is not None:
+                if mode == 'single' and ch == "'":
+                    if i + 1 < n and text[i + 1] == "'":
+                        i += 2
+                        continue
+                    mode = None
+                elif mode == 'double' and ch == '"':
+                    if i + 1 < n and text[i + 1] == '"':
+                        i += 2
+                        continue
+                    mode = None
+                elif mode == 'bracket' and ch == ']':
+                    mode = None
+                elif mode == 'backtick' and ch == '`':
+                    mode = None
+                i += 1
+                continue
+
+            if ch == "'":
+                mode = 'single'
+            elif ch == '"':
+                mode = 'double'
+            elif ch == '[':
+                mode = 'bracket'
+            elif ch == '`':
+                mode = 'backtick'
+            elif ch == '(':
+                level += 1
+            elif ch == ')':
+                level -= 1
+                if level == 0 and i != n - 1:
+                    return False
             i += 1
         return level == 0
+
     changed = True
     while changed:
         changed = False
