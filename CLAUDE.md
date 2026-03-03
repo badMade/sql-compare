@@ -49,23 +49,23 @@ python sql_compare.py --strings "SELECT 1" "SELECT 1" --mode exact
 - Exit code 0 = queries are equal; exit code 1 = queries differ.
 - GUI is optional and guarded behind a `try/except` import of `tkinter`.
 
-## Workflow Permissions — DO NOT REMOVE
-
-The GitHub Actions workflow at `.github/workflows/claude.yml` requires the following permissions block to function correctly. **Do not remove, reduce, or modify any of these permissions:**
-
-```yaml
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-  id-token: write
-  actions: read
-```
-
-All five are required by the Claude Code Action. Removing any one of them will cause workflow failures or warnings.
-
 ## Code Style
 
 - Python with type hints on function signatures.
 - Single-file architecture — all code lives in `sql_compare.py`.
 - Use standard library only — do not add third-party dependencies.
+
+## Workflow Permissions — DO NOT REMOVE
+
+The `.github/workflows/claude.yml` file requires these permissions to function correctly:
+
+```yaml
+permissions:
+  contents: write        # Required: read/write repo files, create branches, push commits
+  pull-requests: write   # Required: read PR diffs, post review comments
+  issues: write          # Required: read issue content, post comments
+  id-token: write        # Required: OIDC token for secure authentication
+  actions: read          # Optional: enables CI status checking via mcp__github_ci__* tools
+```
+
+Do not remove or reduce the first four permissions — they are all required for the Claude Code Action to function. The `actions: read` permission is optional but enables Claude to inspect CI job logs and workflow run statuses when reviewing PRs.
