@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins
+from sql_compare import canonicalize_joins, strip_sql_comments
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -69,6 +69,54 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+
+class TestStripSqlComments(unittest.TestCase):
+    def test_no_comments(self):
+        sql = "SELECT * FROM my_table;"
+        self.assertEqual(strip_sql_comments(sql), sql)
+
+    def test_single_line_comment(self):
+        sql = "SELECT * FROM my_table; -- this is a comment"
+        expected = "SELECT * FROM my_table; "
+        self.assertEqual(strip_sql_comments(sql), expected)
+
+    def test_single_line_comment_own_line(self):
+        sql = "-- this is a comment\nSELECT * FROM my_table;"
+        expected = "\nSELECT * FROM my_table;"
+        self.assertEqual(strip_sql_comments(sql), expected)
+
+    def test_block_comment_single_line(self):
+        sql = "SELECT /* comment */ * FROM my_table;"
+        expected = "SELECT  * FROM my_table;"
+        self.assertEqual(strip_sql_comments(sql), expected)
+
+    def test_block_comment_multi_line(self):
+        sql = "SELECT /* multi\nline\ncomment */ * FROM my_table;"
+        expected = "SELECT  * FROM my_table;"
+        self.assertEqual(strip_sql_comments(sql), expected)
+
+    def test_multiple_comments(self):
+        sql = "SELECT /* comment 1 */ * FROM my_table; -- comment 2"
+        expected = "SELECT  * FROM my_table; "
+        self.assertEqual(strip_sql_comments(sql), expected)
+
+    def test_empty_string(self):
+        self.assertEqual(strip_sql_comments(""), "")
+
+    def test_only_comment(self):
+        self.assertEqual(strip_sql_comments("-- comment"), "")
+        self.assertEqual(strip_sql_comments("/* comment */"), "")
+
+    def test_no_newline_after_single_line_comment(self):
+        sql = "SELECT * FROM my_table; -- comment without newline"
+        expected = "SELECT * FROM my_table; "
+        self.assertEqual(strip_sql_comments(sql), expected)
+
+    def test_empty_block_comment(self):
+        sql = "SELECT /**/ * FROM my_table;"
+        expected = "SELECT  * FROM my_table;"
+        self.assertEqual(strip_sql_comments(sql), expected)
 
 if __name__ == '__main__':
     unittest.main()
