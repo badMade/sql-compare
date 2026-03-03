@@ -914,9 +914,8 @@ class SQLCompareGUI:
     def _update_button_states(self):
         state = ['!disabled'] if self.last_result else ['disabled']
         if hasattr(self, 'btn_copy'):
-            self.btn_copy.state(state)
-            self.btn_clear.state(state)
-            self.btn_save.state(state)
+            for btn in (self.btn_copy, self.btn_clear, self.btn_save):
+                btn.state(state)
 
     def _build_output_frame(self, root, pad):
         frm_out = ttk.Frame(root); frm_out.pack(fill="both", expand=True, **pad)
