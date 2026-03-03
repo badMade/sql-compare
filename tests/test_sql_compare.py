@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins, clause_end_index
+from sql_compare import canonicalize_joins, clause_end_index, tokenize
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -122,6 +122,52 @@ class TestClauseEndIndex(unittest.TestCase):
 
         # If start is past WHERE, it shouldn't find it
         self.assertEqual(clause_end_index(sql, sql.index("WHERE") + 1), len(sql))
+class TestTokenize(unittest.TestCase):
+    def test_tokenize_scenarios(self):
+        """Test the tokenize function with various SQL inputs."""
+        test_cases = [
+            # description, sql_string, expected_tokens
+            ("Basic SELECT query",
+             "SELECT a, b FROM table1 WHERE id = 1",
+             ['SELECT', 'a', ',', 'b', 'FROM', 'table1', 'WHERE', 'id', '=', '1']),
+
+            # Note: E'...' parses as E, '...' while E"..." parses as E"..."
+            ("Single, double, and E-quoted strings",
+             "SELECT 'string', E'string2', \"col 1\", E\"esc\"",
+             ['SELECT', "'string'", ',', 'E', "'string2'", ',', '"col 1"', ',', 'E"esc"']),
+
+            # Note: 'it''s' is parsed as 'it', 's' by the regex currently.
+            # This test ensures no unexpected regressions.
+            ("Strings with escaped single quotes",
+             "SELECT 'it''s'",
+             ['SELECT', "'it'", "'s'"]),
+
+            ("Bracketed and backticked identifiers",
+             "SELECT [my table], `my col`",
+             ['SELECT', '[my table]', ',', '`my col`']),
+
+            ("Integer and float numbers",
+             "SELECT 123, 45.67",
+             ['SELECT', '123', ',', '45.67']),
+
+            ("Multi-character operators",
+             "SELECT a <= b, c >= d, e <> f, g != h, i := j, k -> l, m::n",
+             ['SELECT', 'a', '<=', 'b', ',', 'c', '>=', 'd', ',',
+              'e', '<>', 'f', ',', 'g', '!=', 'h', ',',
+              'i', ':=', 'j', ',', 'k', '->', 'l', ',', 'm', '::', 'n']),
+
+            ("Single-character operators and punctuation",
+             "SELECT a + b - c * d / e % f",
+             ['SELECT', 'a', '+', 'b', '-', 'c', '*', 'd', '/', 'e', '%', 'f']),
+
+            ("Whitespace (spaces, tabs, newlines) should be ignored",
+             "SELECT \n\ta  \r\n  b",
+             ['SELECT', 'a', 'b'])
+        ]
+
+        for description, sql, expected in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(tokenize(sql), expected)
 
 if __name__ == '__main__':
 
