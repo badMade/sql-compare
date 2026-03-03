@@ -26,7 +26,6 @@ import difflib
 import itertools
 import os
 import re
-import itertools
 import sys
 from pathlib import Path
 
