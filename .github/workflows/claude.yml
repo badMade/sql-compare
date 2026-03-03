@@ -18,6 +18,9 @@ jobs:
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
     runs-on: ubuntu-latest
+    # DO NOT remove or reduce these permissions. They are all required for the
+    # Claude Code Action to function correctly (contents, pull-requests, issues,
+    # id-token, actions). Removing any of them will break the workflow.
     permissions:
       contents: write
       pull-requests: write
