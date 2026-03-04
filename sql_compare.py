@@ -860,9 +860,9 @@ class SQLCompareGUI:
         self.allow_full = tk.BooleanVar(value=False)
         self.allow_left = tk.BooleanVar(value=False)
 
-        self._create_widgets()
-
         self.last_result = None  # cache for report generation
+        self._create_widgets()
+        self._set_empty_state()
 
     def _create_widgets(self):
         pad = {"padx": 8, "pady": 6}
@@ -909,10 +909,34 @@ class SQLCompareGUI:
     def _create_buttons_frame(self, pad):
         frm_btns = ttk.Frame(self.root)
         frm_btns.pack(fill="x", **pad)
-        ttk.Button(frm_btns, text="Compare", command=self.do_compare).pack(side="left")
-        ttk.Button(frm_btns, text="Copy Output", command=self.copy_output).pack(side="left", padx=6)
-        ttk.Button(frm_btns, text="Clear", command=self.clear_output).pack(side="left", padx=6)
-        ttk.Button(frm_btns, text="Save Report…", command=self.save_report).pack(side="left", padx=6)
+
+        self.btn_compare = ttk.Button(frm_btns, text="Compare", command=self.do_compare)
+        self.btn_compare.pack(side="left")
+
+        self.btn_copy = ttk.Button(frm_btns, text="Copy Output", command=self.copy_output)
+        self.btn_copy.pack(side="left", padx=6)
+
+        self.btn_clear = ttk.Button(frm_btns, text="Clear", command=self.clear_output)
+        self.btn_clear.pack(side="left", padx=6)
+
+        self.btn_save = ttk.Button(frm_btns, text="Save Report…", command=self.save_report)
+        self.btn_save.pack(side="left", padx=6)
+
+    def _update_button_states(self):
+        if self.last_result is None:
+            self.btn_copy.state(['disabled'])
+            self.btn_clear.state(['disabled'])
+            self.btn_save.state(['disabled'])
+        else:
+            self.btn_copy.state(['!disabled'])
+            self.btn_clear.state(['!disabled'])
+            self.btn_save.state(['!disabled'])
+
+    def _set_empty_state(self):
+        self.txt.delete("1.0", "end")
+        self.txt.insert("1.0", "Ready. Select two SQL files and click 'Compare'...")
+        self.last_result = None
+        self._update_button_states()
 
     def _create_output_frame(self, pad):
         frm_out = ttk.Frame(self.root)
@@ -945,7 +969,7 @@ class SQLCompareGUI:
         if path: self.sql2_path.set(path)
 
     def clear_output(self):
-        self.txt.delete("1.0", "end")
+        self._set_empty_state()
 
     def copy_output(self):
         try:
@@ -977,7 +1001,7 @@ class SQLCompareGUI:
             messagebox.showerror("Error", str(e))
 
     def render_result(self, result: dict, mode: str, ignore_ws: bool):
-        self.clear_output()
+        self.txt.delete("1.0", "end")
         lines = []
         lines.append("=== SQL Compare ===")
         lines.append(f"Whitespace-only equal: {'YES' if result['ws_equal'] else 'NO'}")
@@ -998,6 +1022,7 @@ class SQLCompareGUI:
             lines.append("---- Unified Diff (Canonicalized) ----")
             lines.append(result["diff_can"] if result["diff_can"] else "(no differences)"); lines.append("")
         self.txt.insert("1.0", "\n".join(lines))
+        self._update_button_states()
 
     def save_report(self):
         if not self.last_result:
