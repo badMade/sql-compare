@@ -150,14 +150,14 @@ class TestClauseEndIndex(unittest.TestCase):
 
     def test_terminator_inside_quotes(self):
         """Should ignore terminators that appear inside quoted strings."""
-        sql = "SELECT * FROM t1 WHERE a = 'WHERE' GROUP BY b"
-        self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
-
-        sql2 = "SELECT * FROM t1 JOIN u ON a = '[WHERE]' GROUP BY b"
-        self.assertEqual(clause_end_index(sql2, 0), sql2.index("GROUP BY"))
-
-        sql3 = "SELECT * FROM t1 JOIN u ON a = `WHERE` GROUP BY b"
-        self.assertEqual(clause_end_index(sql3, 0), sql3.index("GROUP BY"))
+        test_cases = [
+            ("in single quotes", "SELECT * FROM t1 WHERE a = 'WHERE' GROUP BY b", "WHERE"),
+            ("in brackets", "SELECT * FROM t1 JOIN u ON a = '[WHERE]' GROUP BY b", "GROUP BY"),
+            ("in backticks", "SELECT * FROM t1 JOIN u ON a = `WHERE` GROUP BY b", "GROUP BY"),
+        ]
+        for description, sql, expected_terminator in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(clause_end_index(sql, 0), sql.index(expected_terminator))
 
     def test_different_start_indices(self):
         """Should honor starting position when searching for terminators."""
