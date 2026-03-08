@@ -251,7 +251,7 @@ CLAUSE_SCANNER_RE = re.compile(
     | (\))                        # Close paren (group 3)
     | \b(WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|QUALIFY|WINDOW|UNION|INTERSECT|EXCEPT)\b # Keywords (group 4)
     """,
-    re.VERBOSE | re.IGNORECASE | re.DOTALL
+    re.VERBOSE | re.IGNORECASE
 )
 
 def clause_end_index(sql: str, start: int) -> int:
