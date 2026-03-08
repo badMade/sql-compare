@@ -127,11 +127,13 @@ class TestClauseEndIndex(unittest.TestCase):
 
     def test_single_terminator(self):
         """Should return index of the first terminator."""
-        sql = "SELECT * FROM my_table WHERE a = 1"
-        self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
-
-        sql = "SELECT * FROM my_table GROUP BY a"
-        self.assertEqual(clause_end_index(sql, 0), sql.index("GROUP BY"))
+        test_cases = [
+            ("with WHERE clause", "SELECT * FROM my_table WHERE a = 1", "WHERE"),
+            ("with GROUP BY clause", "SELECT * FROM my_table GROUP BY a", "GROUP BY"),
+        ]
+        for description, sql, terminator in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(clause_end_index(sql, 0), sql.index(terminator))
 
     def test_multiple_terminators(self):
         """Should return index of the first terminator from start."""
