@@ -1,0 +1,4 @@
+## 2024-05-24 - Fix XSS vulnerability in HTML report generation
+**Vulnerability:** XSS vulnerability when generating HTML comparison reports via `generate_report`, as report data like summaries and titles were injected into HTML using f-strings and diff formatting arguments without escaping.
+**Learning:** Python's standard library diff utilities (e.g., `difflib.HtmlDiff`) do not automatically escape diff metadata attributes like `fromdesc` and `todesc`. In addition, variables manually embedded into an HTML string with f-strings must be explicitly escaped. A `NameError` collision bug also needs to be avoided when assigning HTML text if using the `html` library.
+**Prevention:** Explicitly apply `html.escape()` to all inputs (including metadata fields like titles, user-provided filenames, and dynamically generated message lines) before incorporating them into HTML outputs. Ensure `html` variable doesn't shadow the imported `html` library.
