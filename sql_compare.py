@@ -882,7 +882,8 @@ frm_top.pack(fill="x", **pad)
         frm_top.columnconfigure(1, weight=1)
 
     def _setup_mode_options(self, pad):
-        frm_mode = ttk.Frame(self.root); frm_mode.pack(fill="x", **pad)
+        frm_mode = ttk.Frame(self.root)
+        frm_mode.pack(fill="x", **pad)
         ttk.Label(frm_mode, text="Mode:").pack(side="left")
         for text, val in [("Both", "both"), ("Exact", "exact"), ("Canonical", "canonical")]:
             ttk.Radiobutton(frm_mode, text=text, value=val, variable=self.mode).pack(side="left", padx=6)
