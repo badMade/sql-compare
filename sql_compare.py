@@ -155,14 +155,14 @@ def remove_outer_parentheses(s: str) -> str:
             if mode is not None:
                 if mode == 'single' and ch == "'":
                     if i + 1 < n and text[i + 1] == "'":
-                        i += 2
-                        continue
-                    mode = None
+                        i += 1
+                    else:
+                        mode = None
                 elif mode == 'double' and ch == '"':
                     if i + 1 < n and text[i + 1] == '"':
-                        i += 2
-                        continue
-                    mode = None
+                        i += 1
+                    else:
+                        mode = None
                 elif mode == 'bracket' and ch == ']':
                     mode = None
                 elif mode == 'backtick' and ch == '`':
