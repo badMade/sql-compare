@@ -1141,12 +1141,8 @@ def get_token_type(token: str) -> str:
 
 
 def obfuscate_sql(sql: str, obfuscator: Obfuscator) -> str:
-
-
-    # We need a regex that ALSO captures whitespace so we can reconstruct exactly
-    # We will build a new regex or just find all matches and gaps
-    # Let's use re.split with the original regex to get everything
-    # Wait, TOKEN_REGEX drops whitespace in tokenize(). But finditer finds tokens.
+    # Strip comments to prevent information leakage
+    sql = strip_sql_comments(sql)
 
     pos = 0
     result = []
