@@ -337,8 +337,10 @@ def canonicalize_where_and(sql: str) -> str:
 
 
 def _tokenize_from_clause_body(body: str) -> list:
-    i = 0; n = len(body)
-    mode = None; level = 0
+    i = 0
+    n = len(body)
+    mode = None
+    level = 0
     tokens = []
     buf = []
     def flush_buf():
