@@ -44,15 +44,16 @@ only the standard library at runtime.
   should not be assumed to be available unless they are clearly present in
   the repository configuration.
 ## Project Layout
-* Source lives under `src/sql_compare/` (following the `src` layout convention).
-  [TODO: confirm actual package name — `sql_compare` vs `sqlcompare`]
+* The main CLI entry point is the top-level `sql_compare.py` module in the
+  repository root.
+* Keep new Python modules or scripts either at the repository root or inside
+  existing packages/modules; do not introduce a new `src/` tree or invent
+  package paths (e.g., `sql_compare.drivers`, `sql_compare.schema`,
+  `sql_compare.data`) unless those packages already exist in the repo.
 * Tests live under `tests/` and run with `pytest -q`.
-* Build config is entirely in `pyproject.toml` — there is no `setup.py`
-  or `setup.cfg`.
-* Driver/dialect adapters live under `src/sql_compare/drivers/`; one module
-  per dialect (e.g., `oracle.py`, `postgres.py`, `mysql.py`, `mssql.py`).
-* Schema comparison logic lives under `src/sql_compare/schema/`.
-* Data comparison logic lives under `src/sql_compare/data/`.
+* Build and packaging configuration should follow the files that already
+  exist in the repository (e.g., `pyproject.toml`, `setup.cfg`, or similar);
+  do not assume or add a new build system without an explicit migration.
 * Windows integration scripts (`*.bat`, `*.ps1`) are not part of the
   Python package.
 
