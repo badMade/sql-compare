@@ -220,3 +220,40 @@ class TestClauseEndIndex(unittest.TestCase):
 if __name__ == '__main__':
 
     unittest.main()
+
+class TestObfuscation(unittest.TestCase):
+    def test_obfuscation_basic(self):
+        from sql_compare import Obfuscator, obfuscate_sql, deobfuscate_sql
+        obf = Obfuscator()
+        sql = "SELECT id, name FROM users WHERE age > 18 AND status = 'active';"
+        obfuscated = obfuscate_sql(sql, obf)
+
+        # Verify keywords are untouched
+        self.assertTrue("SELECT" in obfuscated)
+        self.assertTrue("FROM" in obfuscated)
+        self.assertTrue("WHERE" in obfuscated)
+        self.assertTrue("AND" in obfuscated)
+
+        # Verify sensitive parts are obfuscated
+        self.assertFalse("users" in obfuscated)
+        self.assertFalse("age" in obfuscated)
+        self.assertFalse("'active'" in obfuscated)
+
+        # Verify reversing it works perfectly
+        deobfuscated = deobfuscate_sql(obfuscated, obf.rev_map)
+        self.assertEqual(sql, deobfuscated)
+
+    def test_obfuscation_shared_state(self):
+        from sql_compare import Obfuscator, obfuscate_sql
+        obf = Obfuscator()
+        sql1 = "SELECT id FROM users;"
+        sql2 = "SELECT id FROM accounts WHERE ref = id;"
+
+        o1 = obfuscate_sql(sql1, obf)
+        o2 = obfuscate_sql(sql2, obf)
+
+        # "id" should map to the exact same surrogate in both
+        id_token = obf.fwd_map["id"]
+        self.assertEqual(o1.split()[1], id_token)
+        # Check second appearance in sql2
+        self.assertTrue(id_token in o2)

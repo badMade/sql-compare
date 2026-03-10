@@ -25,8 +25,11 @@ import argparse
 import difflib
 import os
 import re
+
 import itertools
 import sys
+import json
+from typing import Dict, Tuple
 from pathlib import Path
 
 SQL_CLAUSE_TERMINATORS = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"]
@@ -706,6 +709,9 @@ def compare_sql(a: str, b: str,
 
 def parse_args(argv):
     p = argparse.ArgumentParser(description="Compare two SQL statements with Exact/Canonical modes and GUI.")
+    p.add_argument("--obfuscate", action="store_true", help="Obfuscate SQL before comparing")
+    p.add_argument("--obfuscation-map", type=str, metavar="MAP_FILE", help="File to save/load obfuscation mapping")
+    p.add_argument("--deobfuscate", action="store_true", help="Deobfuscate SQL using mapping file")
     p.add_argument("files", nargs="*", help="Two SQL files to compare")
     p.add_argument("--strings", nargs=2, metavar=("SQL1", "SQL2"), help="Provide two SQL strings inline")
     p.add_argument("--stdin", action="store_true", help="Read two SQL statements from stdin separated by a line with ---")
@@ -1052,13 +1058,202 @@ def maybe_launch_gui(args_parsed) -> bool:
     return False
 
 
+    main()
+
+
+
+class Obfuscator:
+    def __init__(self):
+        # original -> obfuscated
+        self.fwd_map: Dict[str, str] = {}
+        # obfuscated -> original
+        self.rev_map: Dict[str, str] = {}
+        self.counters = {
+            'id': 1,
+            'str': 1,
+            'num': 1
+        }
+
+    def obfuscate_token(self, token: str, token_type: str) -> str:
+        """
+        token_type should be 'id', 'str', or 'num'.
+        """
+        if token in self.fwd_map:
+            return self.fwd_map[token]
+
+        obf = f"{token_type}_{self.counters[token_type]}"
+        self.counters[token_type] += 1
+        self.fwd_map[token] = obf
+        self.rev_map[obf] = token
+        return obf
+
+
+SQL_KEYWORDS = {
+    # Standard SQL keywords (not exhaustive but covers main structure)
+    "SELECT", "FROM", "WHERE", "AND", "OR", "NOT", "IN", "IS", "NULL", "AS",
+    "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "CROSS", "ON", "USING",
+    "GROUP", "BY", "HAVING", "ORDER", "ASC", "DESC", "LIMIT", "OFFSET",
+    "UNION", "ALL", "INTERSECT", "EXCEPT", "WITH", "AS", "CASE", "WHEN", "THEN",
+    "ELSE", "END", "CAST", "EXTRACT", "EXISTS", "BETWEEN", "LIKE", "ILIKE",
+    "ANY", "SOME", "ALL", "DISTINCT", "OVER", "PARTITION", "WINDOW", "QUALIFY",
+    "CREATE", "TABLE", "VIEW", "INDEX", "DROP", "ALTER", "INSERT", "INTO",
+    "VALUES", "UPDATE", "SET", "DELETE", "TRUNCATE", "MERGE", "MATCHED",
+    "GRANT", "REVOKE", "COMMIT", "ROLLBACK", "BEGIN", "END", "DECLARE",
+    "FUNCTION", "PROCEDURE", "RETURNS", "LANGUAGE", "IF", "WHILE", "LOOP",
+    "RETURN", "TRUE", "FALSE", "UNKNOWN"
+}
+
+def is_keyword(token: str) -> bool:
+    return token.upper() in SQL_KEYWORDS
+
+def get_token_type(token: str) -> str:
+    """Classify token as 'id', 'str', 'num', 'kw', or 'op'."""
+    if token.isspace():
+        return 'ws'
+
+    # Check if it's a string literal ('...' or "...")
+    if token.startswith("'") or token.startswith('"'):
+        return 'str'
+
+    # Check if it's a bracketed identifier
+    if token.startswith("[") or token.startswith("`"):
+        return 'id'
+
+    # Check if it's a number
+    try:
+        float(token)
+        return 'num'
+    except ValueError:
+        pass
+
+    # Check if it's an operator (non-alphanumeric, not _ or $)
+    if not any(c.isalnum() or c in '_$' for c in token):
+        return 'op'
+
+    # Check if it's a keyword
+    if is_keyword(token):
+        return 'kw'
+
+    # Otherwise, it's an identifier
+    return 'id'
+
+
+
+
+def obfuscate_sql(sql: str, obfuscator: Obfuscator) -> str:
+
+
+    # We need a regex that ALSO captures whitespace so we can reconstruct exactly
+    # We will build a new regex or just find all matches and gaps
+    # Let's use re.split with the original regex to get everything
+    # Wait, TOKEN_REGEX drops whitespace in tokenize(). But finditer finds tokens.
+
+    pos = 0
+    result = []
+
+    for match in TOKEN_REGEX.finditer(sql):
+        start, end = match.span()
+        # Add any unmatched text (whitespace, etc.) before this token
+        if start > pos:
+            result.append(sql[pos:start])
+
+        token = match.group(0)
+        if token.isspace():
+            result.append(token)
+        else:
+            ttype = get_token_type(token)
+            if ttype in ('id', 'str', 'num'):
+                # Handle case-insensitive mapping for identifiers?
+                # Usually SQL identifiers are case-insensitive unless quoted.
+                # To be perfectly safe and reversible, map the exact token string.
+                obf = obfuscator.obfuscate_token(token, ttype)
+                result.append(obf)
+            else:
+                result.append(token)
+
+        pos = end
+
+    # Add any remaining text
+    if pos < len(sql):
+        result.append(sql[pos:])
+
+    return "".join(result)
+
+
+def deobfuscate_sql(obfuscated_sql: str, mapping: Dict[str, str]) -> str:
+    """
+    Reverse the obfuscation using the provided mapping.
+    Because our surrogate tokens are valid identifiers (e.g. id_1),
+    we can use a regex to find all word-like tokens and replace if they match.
+    """
+    import re
+
+    # Create a regex that matches any of the keys in the mapping
+    # Sort keys by length descending to match longest first
+    keys = sorted(mapping.keys(), key=len, reverse=True)
+    if not keys:
+        return obfuscated_sql
+
+    # Escape keys for regex
+    escaped_keys = [re.escape(k) for k in keys]
+    # Build a giant OR regex
+    pattern = re.compile(r'\b(?:' + '|'.join(escaped_keys) + r')\b')
+
+    def replacer(match):
+        return mapping[match.group(0)]
+
+    return pattern.sub(replacer, obfuscated_sql)
+
+def save_mapping(obfuscator: Obfuscator, filepath: str):
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(obfuscator.rev_map, f, indent=2)
+
+def load_mapping(filepath: str) -> Dict[str, str]:
+    with open(filepath, 'r', encoding='utf-8') as f:
+        return json.load(f)
+
+
 def main(argv=None):
     args = parse_args(argv or sys.argv[1:])
+    if args.deobfuscate:
+        if not args.files or len(args.files) != 1:
+            print("Error: --deobfuscate requires exactly one SQL file to deobfuscate.", file=sys.stderr)
+            sys.exit(2)
+        if not args.obfuscation_map:
+            print("Error: --deobfuscate requires a mapping file provided via --obfuscation-map.", file=sys.stderr)
+            sys.exit(2)
+        try:
+            sql_content = safe_read_file(args.files[0])
+            mapping = load_mapping(args.obfuscation_map)
+            deobfuscated = deobfuscate_sql(sql_content, mapping)
+            print(deobfuscated)
+        except Exception as e:
+            print(f"Failed to deobfuscate: {e}", file=sys.stderr)
+            sys.exit(2)
+        return
+
     if maybe_launch_gui(args): return
     a, b, src = load_inputs(args)
     if a is None or b is None:
         print("Provide two files, or --strings, or --stdin; or run with no args to open the GUI.", file=sys.stderr)
         sys.exit(2)
+
+    if args.obfuscate:
+        obf = Obfuscator()
+        a = obfuscate_sql(a, obf)
+        b = obfuscate_sql(b, obf)
+        print("--- Obfuscated SQL 1 ---")
+        print(a)
+        print("--- Obfuscated SQL 2 ---")
+        print(b)
+        print("------------------------")
+        if args.obfuscation_map:
+            try:
+                save_mapping(obf, args.obfuscation_map)
+                print(f"[Obfuscation] Mapping saved to: {args.obfuscation_map}")
+            except Exception as e:
+                print(f"[Obfuscation] Failed to save mapping: {e}", file=sys.stderr)
+
     result = compare_sql(
         a, b,
         ignore_ws=args.ignore_whitespace,
@@ -1074,7 +1269,6 @@ def main(argv=None):
             print(f"[Report] Failed: {e}", file=sys.stderr)
             sys.exit(2)
     print_result_and_exit(result, args.mode, args.ignore_whitespace)
-
 
 if __name__ == "__main__":
     main()
