@@ -1,11 +1,10 @@
 # Copilot Custom Instructions
 
 ## Project Context
-sql-compare is a Python CLI tool that compares SQL databases across two dimensions:
-**schema comparison** (DDL-level structural diffs) and **data comparison** (row-level
-result diffing). It targets Oracle, PostgreSQL, MySQL/MariaDB, and SQL Server.
-Comparison logic is organized by driver/dialect — do not conflate cross-dialect
-handling or add dialect-specific logic outside the appropriate driver module.
+sql-compare is a Python CLI tool designed for comparing two SQL statements.
+It focuses on canonicalization and textual diffing of SQL queries,
+operating solely with the standard library. This project does not involve
+multi-database schema/data comparison or database-specific driver modules.
 
 ## Language & Runtime
 * Python >= 3.8 — do not use syntax or stdlib features added after 3.8
