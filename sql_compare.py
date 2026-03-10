@@ -1058,7 +1058,6 @@ def maybe_launch_gui(args_parsed) -> bool:
     return False
 
 
-    main()
 
 
 
