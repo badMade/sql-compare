@@ -84,8 +84,8 @@ When reviewing pull requests, pay attention to:
 5. **Encoding** — all file I/O must specify `encoding='utf-8'`.
 6. **Path handling** — use `pathlib.Path`, not string concatenation or
    `os.path`.
-7. **Entry-point contract** — `main(argv=None)` signature, returns an int
-   exit code.
+7. **Entry-point contract** — `main(argv=None)` signature; prefer returning
+   an int exit code, but calling `sys.exit(<int>)` is also acceptable.
 8. **Test coverage** — new entry points, drivers, or comparison utilities
    need at least a smoke test; integration tests must be gated behind a marker.
 9. **Security** — watch for SQL injection via unsanitized connection params
