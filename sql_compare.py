@@ -353,18 +353,11 @@ def canonicalize_where_and(sql: str) -> str:
     return collapse_whitespace(s)
 
 
-def _parse_from_clause_body(body: str):
-    """
-    Parse FROM body into base and join segments.
-    Returns: (base_text, segments)
-    segment = dict(type='INNER'|'LEFT'|'RIGHT'|'FULL'|'CROSS'|'NATURAL'|...,
-                   table='...',
-                   cond_kw='ON'|'USING'|None,
-                   cond='...' or '')
-    Heuristic, top-level only.
-    """
-    i = 0; n = len(body)
-    mode = None; level = 0
+def _tokenize_from_clause_body(body: str) -> list:
+    i = 0
+    n = len(body)
+    mode = None
+    level = 0
     tokens = []
     buf = []
     def flush_buf():
@@ -406,18 +399,39 @@ def _parse_from_clause_body(body: str):
                 else: mode = None
             elif mode == 'bracket' and ch == ']': mode = None
             elif mode == 'backtick' and ch == '`': mode = None
-        buf.append(ch); i += 1
+            elif mode == 'backtick' and ch == '`': mode = None
+        buf.append(ch)
+        i += 1
     flush_buf()
+    return tokens
 
+
+def _extract_base_table(tokens: list) -> tuple:
     base = ""
-    segments = []
     idx = 0
     while idx < len(tokens) and tokens[idx][0] != "JOINKW":
         kind, text = tokens[idx]
         if kind == "TEXT":
             base = (base + " " + text).strip()
         idx += 1
+    return base, idx
 
+
+def _clean_join_type(join_kw: str) -> str:
+    seg_type = join_kw.replace(" OUTER", "").upper()
+    if seg_type.endswith(" JOIN"):
+        seg_type = seg_type[:-5]
+    elif seg_type == "JOIN":
+        seg_type = ""
+    seg_type = seg_type.strip()
+    if seg_type == "":
+        seg_type = "INNER"
+    return seg_type
+
+
+def _extract_join_segments(tokens: list, start_idx: int) -> list:
+    segments = []
+    idx = start_idx
     while idx < len(tokens):
         if tokens[idx][0] != "JOINKW":
             idx += 1; continue
@@ -443,24 +457,29 @@ def _parse_from_clause_body(body: str):
                     cond_text = (cond_text + " " + t).strip()
                 idx += 1
 
-        seg_type = join_kw.replace(" OUTER", "")
-        seg_type = seg_type.upper()
-        if seg_type.endswith(" JOIN"):
-            seg_type = seg_type[:-5]
-        elif seg_type == "JOIN":
-            seg_type = ""
-        seg_type = seg_type.strip()
-        if seg_type == "":
-            seg_type = "INNER"
-            seg_type = "INNER"
         segments.append({
-            "type": seg_type,
+            "type": _clean_join_type(join_kw),
             "table": collapse_whitespace(table_text),
             "cond_kw": cond_kw,
             "cond": collapse_whitespace(cond_text),
         })
-    base = collapse_whitespace(base)
-    return base, segments
+    return segments
+
+
+def _parse_from_clause_body(body: str) -> tuple:
+    """
+    Parse FROM body into base and join segments.
+    Returns: (base_text, segments)
+    segment = dict(type='INNER'|'LEFT'|'RIGHT'|'FULL'|'CROSS'|'NATURAL'|...,
+                   table='...',
+                   cond_kw='ON'|'USING'|None,
+                   cond='...' or '')
+    Heuristic, top-level only.
+    """
+    tokens = _tokenize_from_clause_body(body)
+    base, idx = _extract_base_table(tokens)
+    segments = _extract_join_segments(tokens, idx)
+    return collapse_whitespace(base), segments
 
 
 def _rebuild_from_body(base: str, segments: list) -> str:
