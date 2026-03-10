@@ -217,9 +217,6 @@ class TestClauseEndIndex(unittest.TestCase):
         self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
         self.assertEqual(clause_end_index(sql, sql.index("WHERE") + 1), len(sql))
 
-if __name__ == '__main__':
-
-    unittest.main()
 
 class TestObfuscation(unittest.TestCase):
     def test_obfuscation_basic(self):
@@ -257,3 +254,6 @@ class TestObfuscation(unittest.TestCase):
         self.assertEqual(o1.split()[1], id_token)
         # Check second appearance in sql2
         self.assertTrue(id_token in o2)
+
+if __name__ == '__main__':
+    unittest.main()
