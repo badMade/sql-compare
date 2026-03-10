@@ -1186,7 +1186,6 @@ def deobfuscate_sql(obfuscated_sql: str, mapping: Dict[str, str]) -> str:
     Because our surrogate tokens are valid identifiers (e.g. id_1),
     we can use a regex to find all word-like tokens and replace if they match.
     """
-    import re
 
     # Create a regex that matches any of the keys in the mapping
     # Sort keys by length descending to match longest first
