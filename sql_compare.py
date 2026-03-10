@@ -194,7 +194,7 @@ TOKEN_REGEX = re.compile(
   | (?:\[(?:[^\]]*?)\])                # [bracketed] identifier
   | (?:`(?:[^`]*?)`)                   # `backticked` identifier
   | (?:[A-Z_][A-Z0-9_\$]*\b)           # identifiers/keywords (after uppercasing)
-  | (?:[0-9]+\.[0-9]+|[0-9]+)          # numbers
+  | (?:(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)          # numbers
   | (?:<=|>=|<>|!=|:=|->|::)           # multi-char operators
   | (?:[(),=*\/\+\-<>\.%])             # single-char tokens
   | (?:\.)                             # dot
@@ -1058,6 +1058,7 @@ def maybe_launch_gui(args_parsed) -> bool:
     return False
 
 
+    main()
 
 
 
@@ -1140,8 +1141,12 @@ def get_token_type(token: str) -> str:
 
 
 def obfuscate_sql(sql: str, obfuscator: Obfuscator) -> str:
-    # Strip comments to prevent information leakage
-    sql = strip_sql_comments(sql)
+
+
+    # We need a regex that ALSO captures whitespace so we can reconstruct exactly
+    # We will build a new regex or just find all matches and gaps
+    # Let's use re.split with the original regex to get everything
+    # Wait, TOKEN_REGEX drops whitespace in tokenize(). But finditer finds tokens.
 
     pos = 0
     result = []
