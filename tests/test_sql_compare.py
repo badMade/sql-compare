@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins, clause_end_index, tokenize
+from sql_compare import canonicalize_joins, clause_end_index, tokenize, top_level_find_kw
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -217,6 +217,70 @@ class TestClauseEndIndex(unittest.TestCase):
         self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
         self.assertEqual(clause_end_index(sql, sql.index("WHERE") + 1), len(sql))
 
-if __name__ == '__main__':
+class TestTopLevelFindKw(unittest.TestCase):
+    def test_keyword_in_single_quotes_not_matched(self):
+        """Keyword inside single-quoted string should not be returned."""
+        sql = "SELECT * FROM t1 WHERE a = 'WHERE x = 1'"
+        # The real top-level WHERE is at the first occurrence; the one inside quotes is skipped.
+        idx = top_level_find_kw(sql, "WHERE", 0)
+        self.assertEqual(idx, sql.index("WHERE"))
+        # There is only one top-level WHERE; searching past it yields -1.
+        self.assertEqual(top_level_find_kw(sql, "WHERE", idx + 1), -1)
 
+    def test_keyword_in_double_quotes_not_matched(self):
+        """Keyword inside double-quoted identifier should not be returned."""
+        sql = 'SELECT "FROM other" FROM t1'
+        # The FROM inside double quotes must be skipped; only the top-level FROM counts.
+        idx = top_level_find_kw(sql, "FROM", 0)
+        self.assertEqual(sql[idx:idx + 4], "FROM")
+        # Confirm it is the second FROM (after the quoted one).
+        self.assertGreater(idx, sql.index('"FROM other"'))
+
+    def test_keyword_in_brackets_not_matched(self):
+        """Keyword inside a bracketed identifier should not be returned."""
+        sql = "SELECT [WHERE col] FROM t1 WHERE id = 1"
+        idx = top_level_find_kw(sql, "WHERE", 0)
+        # Should find the real WHERE, not the one inside [WHERE col].
+        self.assertEqual(sql[idx:idx + 5], "WHERE")
+        self.assertGreater(idx, sql.index("[WHERE col]"))
+
+    def test_keyword_in_backticks_not_matched(self):
+        """Keyword inside a backtick-quoted identifier should not be returned."""
+        sql = "SELECT `FROM_alias` FROM t1"
+        idx = top_level_find_kw(sql, "FROM", 0)
+        # The backtick-enclosed token `FROM_alias` does not contain a word-boundary FROM,
+        # but the real FROM keyword should be found at the top level.
+        self.assertEqual(sql[idx:idx + 4], "FROM")
+        self.assertGreater(idx, sql.index("`FROM_alias`"))
+
+    def test_keyword_in_subquery_not_matched(self):
+        """Keyword inside a parenthesized subquery should not be returned."""
+        sql = "SELECT * FROM (SELECT * FROM inner_t WHERE b = 1) sub WHERE a = 1"
+        idx = top_level_find_kw(sql, "WHERE", 0)
+        # Should return the outermost WHERE, not the one inside the subquery.
+        self.assertEqual(sql[idx:idx + 5], "WHERE")
+        self.assertEqual(idx, sql.rindex("WHERE"))
+
+    def test_start_offset_skips_earlier_occurrences(self):
+        """Passing a start offset should skip keywords before that position."""
+        sql = "SELECT a FROM t1 WHERE a = 1 GROUP BY a ORDER BY a"
+        where_i = top_level_find_kw(sql, "WHERE", 0)
+        self.assertGreaterEqual(where_i, 0)
+        # Starting past WHERE should not find WHERE again.
+        self.assertEqual(top_level_find_kw(sql, "WHERE", where_i + 1), -1)
+
+    def test_keyword_not_present_returns_minus_one(self):
+        """Should return -1 when the keyword is not present at all."""
+        sql = "SELECT a FROM t1"
+        self.assertEqual(top_level_find_kw(sql, "WHERE", 0), -1)
+
+    def test_multiword_keyword_in_subquery_not_matched(self):
+        """Multi-word keyword inside a subquery should not be returned at top level."""
+        sql = "SELECT * FROM (SELECT a FROM t2 GROUP BY a) sub GROUP BY b"
+        idx = top_level_find_kw(sql, "GROUP BY", 0)
+        # Should find the outermost GROUP BY, not the one inside the subquery.
+        self.assertEqual(idx, sql.rindex("GROUP BY"))
+
+
+if __name__ == '__main__':
     unittest.main()
