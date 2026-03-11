@@ -28,9 +28,7 @@ import re
 
 import itertools
 import sys
-import json
-from typing import Dict, Tuple
-from pathlib import Path
+from typing import Dict
 
 SQL_CLAUSE_TERMINATORS = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"]
 from collections import Counter
