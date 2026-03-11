@@ -241,7 +241,7 @@ def top_level_find_kw(sql: str, kw: str, start: int = 0):
     Uses regex scanning for performance.
     """
     # pattern groups: 1=quotes/ids, 2=open paren, 3=close paren, 4=keyword
-    pattern = r"('(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|\[(?:[^\]]*)\]|`(?:[^`]*)`)|(\()|(\))|\b(" + re.escape(kw) + r")\b"
+    pattern = r"('(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|\[[^\]]*\]|`[^`]*`)|(\()|(\))|\b(" + re.escape(kw) + r")\b"
     scanner = re.compile(pattern, re.IGNORECASE)
 
     level = 0
