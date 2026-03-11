@@ -222,8 +222,10 @@ class TestTopLevelFindKw(unittest.TestCase):
         """Keywords inside single or double quotes should be ignored."""
         sql = "SELECT 'FROM' AS c1, \"WHERE\" AS c2 FROM t1"
         # Should find the top-level FROM, not the ones in quotes
-        self.assertEqual(top_level_find_kw(sql, "FROM"), 35)
-        self.assertEqual(top_level_find_kw(sql, "WHERE"), -1)
+        with self.subTest(description="Find top-level FROM, ignore quoted one"):
+            self.assertEqual(top_level_find_kw(sql, "FROM"), 35)
+        with self.subTest(description="Do not find quoted WHERE"):
+            self.assertEqual(top_level_find_kw(sql, "WHERE"), -1)
 
     def test_identifiers(self):
         """Keywords inside brackets or backticks should be ignored."""
