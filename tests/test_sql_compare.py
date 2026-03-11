@@ -1,7 +1,7 @@
 import unittest
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
-    strip_sql_comments, uppercase_outside_quotes,
+    strip_sql_comments, top_level_find_kw, uppercase_outside_quotes,
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -308,6 +308,29 @@ class TestUppercaseOutsideQuotes(unittest.TestCase):
     def test_quotes_inside_quotes(self):
         result = uppercase_outside_quotes("""select 'he said "hi"' from t""")
         self.assertEqual(result, """SELECT 'he said "hi"' FROM T""")
+
+
+class TestTopLevelFindKw(unittest.TestCase):
+    def test_ignores_keyword_inside_single_quotes(self):
+        sql = "SELECT 'WHERE' AS w FROM t WHERE id = 1"
+        self.assertEqual(top_level_find_kw(sql, "WHERE"), sql.rindex("WHERE"))
+
+    def test_ignores_keyword_inside_double_quotes(self):
+        sql = 'SELECT "FROM" AS col FROM t'
+        self.assertEqual(top_level_find_kw(sql, "FROM"), sql.rindex("FROM"))
+
+    def test_ignores_keyword_inside_brackets_and_backticks(self):
+        sql = "SELECT [WHERE], `WHERE` FROM t WHERE x = 1"
+        self.assertEqual(top_level_find_kw(sql, "WHERE"), sql.rindex("WHERE"))
+
+    def test_ignores_keyword_inside_parentheses(self):
+        sql = "SELECT id FROM (SELECT 1 AS x WHERE 1 = 1) sub WHERE id = 1"
+        self.assertEqual(top_level_find_kw(sql, "WHERE"), sql.rindex("WHERE"))
+
+    def test_start_offset_finds_next_top_level_keyword(self):
+        sql = "SELECT * FROM t WHERE a = 1 ORDER BY a"
+        where_idx = top_level_find_kw(sql, "WHERE")
+        self.assertEqual(top_level_find_kw(sql, "ORDER", start=where_idx), sql.index("ORDER"))
 
 
 class TestSecurity(unittest.TestCase):
