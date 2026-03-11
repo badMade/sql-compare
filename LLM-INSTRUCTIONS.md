@@ -1,4 +1,4 @@
-# LLM-INSTRUCTIONS.md — Generic AI Coding Assistant Guide
+<!--\nNOTE: This file contains duplicated project context. When making changes here,\nplease ensure they are propagated to the following files:\n- CLAUDE.md\n- AGENTS.md\n-->\n# LLM-INSTRUCTIONS.md — Generic AI Coding Assistant Guide
 
 > This file provides project context for any LLM-based coding assistant not
 > covered by a tool-specific config file. If your tool reads a dedicated file
