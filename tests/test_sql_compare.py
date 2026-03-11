@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins, clause_end_index, tokenize
+from sql_compare import canonicalize_joins, clause_end_index, tokenize, Obfuscator, obfuscate_sql, deobfuscate_sql
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -220,7 +220,6 @@ class TestClauseEndIndex(unittest.TestCase):
 
 class TestObfuscation(unittest.TestCase):
     def test_obfuscation_basic(self):
-        from sql_compare import Obfuscator, obfuscate_sql, deobfuscate_sql
         obf = Obfuscator()
         sql = "SELECT id, name FROM users WHERE age > 18 AND status = 'active';"
         obfuscated = obfuscate_sql(sql, obf)
@@ -241,7 +240,6 @@ class TestObfuscation(unittest.TestCase):
         self.assertEqual(sql, deobfuscated)
 
     def test_obfuscation_shared_state(self):
-        from sql_compare import Obfuscator, obfuscate_sql
         obf = Obfuscator()
         sql1 = "SELECT id FROM users;"
         sql2 = "SELECT id FROM accounts WHERE ref = id;"
