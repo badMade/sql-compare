@@ -1058,13 +1058,54 @@ def maybe_launch_gui(args_parsed) -> bool:
     return False
 
 
-    main()
+def maybe_launch_gui(args_parsed) -> bool:
+    return False
 
 
+def main(argv=None):
+    args = parse_args(argv or sys.argv[1:])
+    if args.deobfuscate:
+        if not args.files or len(args.files) != 1:
+            print("Error: --deobfuscate requires exactly one SQL file to deobfuscate.", file=sys.stderr)
+            sys.exit(2)
+        if not args.obfuscation_map:
+            print("Error: --deobfuscate requires a mapping file provided via --obfuscation-map.", file=sys.stderr)
+            sys.exit(2)
+        try:
+            sql_content = safe_read_file(args.files[0])
+            mapping = load_mapping(args.obfuscation_map)
+            deobfuscated = deobfuscate_sql(sql_content, mapping)
+            print(deobfuscated)
+        except Exception as e:
+            print(f"Failed to deobfuscate: {e}", file=sys.stderr)
+            sys.exit(2)
+        return
 
-class Obfuscator:
-    def __init__(self):
-        # original -> obfuscated
+    if maybe_launch_gui(args): return
+    a, b, src = load_inputs(args)
+    if a is None or b is None:
+        print("Provide two files, or --strings, or --stdin; or run with no args to open the GUI.", file=sys.stderr)
+        sys.exit(2)
+
+    if args.obfuscate:
+        obf = Obfuscator()
+        a = obfuscate_sql(a, obf)
+        b = obfuscate_sql(b, obf)
+        print("--- Obfuscated SQL 1 ---")
+        print(a)
+        print("--- Obfuscated SQL 2 ---")
+        print(b)
+        print("------------------------")
+        if args.obfuscation_map:
+            try:
+                save_mapping(obf, args.obfuscation_map)
+                print(f"[Obfuscation] Mapping saved to: {args.obfuscation_map}")
+            except Exception as e:
+                print(f"[Obfuscation] Failed to save mapping: {e}", file=sys.stderr)
+
+    result = compare_sql(
+        a, b,
+        ignore_ws=args.ignore_whitespace,
         self.fwd_map: Dict[str, str] = {}
         # obfuscated -> original
         self.rev_map: Dict[str, str] = {}
