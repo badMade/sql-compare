@@ -236,33 +236,25 @@ def split_top_level(s: str, sep: str) -> list:
 
 
 def top_level_find_kw(sql: str, kw: str, start: int = 0):
-    """Find top-level occurrence of keyword kw (word boundary) starting at start."""
-    kw = kw.upper()
-    i = start; mode = None; level = 0
-    while i < len(sql):
-        ch = sql[i]
-        if mode is None:
-            if ch == "'": mode = 'single'
-            elif ch == '"': mode = 'double'
-            elif ch == '[': mode = 'bracket'
-            elif ch == '`': mode = 'backtick'
-            elif ch == '(':
-                level += 1
-            elif ch == ')':
-                level = max(0, level - 1)
+    """
+    Find top-level occurrence of keyword kw (word boundary) starting at start.
+    Uses regex scanning for performance.
+    """
+    # pattern groups: 1=quotes/ids, 2=open paren, 3=close paren, 4=keyword
+    pattern = r"('(?:''|[^'])*'|\"(?:\"\"|[^\"])*\"|\[(?:[^\]]*)\]|`(?:[^`]*)`)|(\()|(\))|\b(" + re.escape(kw) + r")\b"
+    scanner = re.compile(pattern, re.IGNORECASE)
+
+    level = 0
+    for match in scanner.finditer(sql, pos=start):
+        if match.group(1): # Quoted or identifier
+            continue
+        elif match.group(2): # (
+            level += 1
+        elif match.group(3): # )
+            level = max(0, level - 1)
+        elif match.group(4): # Keyword match
             if level == 0:
-                m = re.match(rf"\b{re.escape(kw)}\b", sql[i:])
-                if m: return i
-        else:
-            if mode == 'single' and ch == "'":
-                if i + 1 < len(sql) and sql[i + 1] == "'": i += 1
-                else: mode = None
-            elif mode == 'double' and ch == '"':
-                if i + 1 < len(sql) and sql[i + 1] == '"': i += 1
-                else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
-        i += 1
+                return match.start()
     return -1
 
 

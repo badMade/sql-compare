@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins, clause_end_index, tokenize
+from sql_compare import canonicalize_joins, clause_end_index, tokenize, top_level_find_kw
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -216,6 +216,37 @@ class TestClauseEndIndex(unittest.TestCase):
         sql = "SELECT * FROM my_table WHERE a = 1"
         self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
         self.assertEqual(clause_end_index(sql, sql.index("WHERE") + 1), len(sql))
+
+class TestTopLevelFindKw(unittest.TestCase):
+    def test_keywords_in_quotes(self):
+        """Keywords inside single or double quotes should be ignored."""
+        sql = "SELECT 'FROM' AS c1, \"WHERE\" AS c2 FROM t1"
+        # Should find the top-level FROM, not the ones in quotes
+        self.assertEqual(top_level_find_kw(sql, "FROM"), 35)
+        self.assertEqual(top_level_find_kw(sql, "WHERE"), -1)
+
+    def test_identifiers(self):
+        """Keywords inside brackets or backticks should be ignored."""
+        sql = "SELECT [FROM] AS c1, `WHERE` AS c2 FROM t1"
+        self.assertEqual(top_level_find_kw(sql, "FROM"), 35)
+        self.assertEqual(top_level_find_kw(sql, "WHERE"), -1)
+
+    def test_subqueries(self):
+        """Keywords inside parenthesized subqueries should be ignored."""
+        sql = "SELECT * FROM (SELECT FROM t1) AS t2"
+        # Find only the first FROM
+        self.assertEqual(top_level_find_kw(sql, "FROM"), 9)
+
+    def test_offset(self):
+        """Should respect the start offset."""
+        sql = "SELECT a FROM t1 JOIN t2 ON t1.id = t2.id"
+        self.assertEqual(top_level_find_kw(sql, "FROM", 0), 9)
+        self.assertEqual(top_level_find_kw(sql, "FROM", 10), -1)
+
+    def test_word_boundaries(self):
+        """Should only match whole words."""
+        sql = "SELECT FROM_TABLE FROM t1"
+        self.assertEqual(top_level_find_kw(sql, "FROM"), 18)
 
 if __name__ == '__main__':
 
