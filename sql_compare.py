@@ -988,7 +988,18 @@ class SQLCompareGUI:
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
-        self.txt.insert("1.0", "Select files and click Compare to see results here.")
+
+        self.txt.tag_configure("empty", foreground="gray", justify="center")
+        self.txt.insert("1.0", "\n\n\n\nSelect files and click Compare to see results here.", "empty")
+        self.txt.bind("<Key>", self._prevent_text_modification)
+
+    def _prevent_text_modification(self, event):
+        if event.keysym in ("Up", "Down", "Left", "Right", "Home", "End", "Prior", "Next"):
+            return None
+        if event.state & (0x0004 | 0x0008 | 0x0010): # Control/Command modifiers
+            if event.keysym.lower() in ('c', 'a'):
+                return None
+        return "break"
 
     def _toggle_join_options(self):
         # Enable/disable dependent flags based on global join toggle
@@ -1011,7 +1022,7 @@ class SQLCompareGUI:
 
     def clear_output(self):
         self.txt.delete("1.0", "end")
-        self.txt.insert("1.0", "Select files and click Compare to see results here.")
+        self.txt.insert("1.0", "\n\n\n\nSelect files and click Compare to see results here.", "empty")
         self.btn_copy.state(['disabled'])
         self.btn_clear.state(['disabled'])
         self.btn_save.state(['disabled'])
