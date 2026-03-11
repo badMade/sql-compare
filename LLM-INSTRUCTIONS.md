@@ -1,0 +1,71 @@
+<!--\nNOTE: This file contains duplicated project context. When making changes here,\nplease ensure they are propagated to the following files:\n- CLAUDE.md\n- AGENTS.md\n-->\n# LLM-INSTRUCTIONS.md — Generic AI Coding Assistant Guide
+
+> This file provides project context for any LLM-based coding assistant not
+> covered by a tool-specific config file. If your tool reads a dedicated file
+> (e.g., CLAUDE.md, AGENTS.md, JULES.md, .gemini/styleguide.md,
+> .github/copilot-instructions.md), prefer that file over this one.
+
+## Project Overview
+
+SQL Compare is a pure Python (3.8+) tool for comparing SQL statements with both GUI (Tkinter) and CLI interfaces. It uses only the Python standard library — no third-party dependencies.
+
+## Key Files
+
+- `sql_compare.py` — Single-file application (~1000 lines) containing all logic: SQL normalization, canonical comparison, diff generation, HTML/TXT reports, and Tkinter GUI.
+- `examples/A.sql`, `examples/B.sql` — Example SQL files for testing canonical comparison.
+- `examples/two_queries.txt` — Stdin input example (queries separated by `---`).
+
+## How to Run
+
+```bash
+# Run the CLI comparison (canonical mode)
+python sql_compare.py examples/A.sql examples/B.sql --mode canonical
+
+# Run with HTML report output
+python sql_compare.py examples/A.sql examples/B.sql --mode both --report compare.html --report-format html
+
+# Compare inline strings
+python sql_compare.py --strings "SELECT a, b FROM t" "SELECT b, a FROM t" --mode canonical
+
+# Launch GUI (requires Tkinter)
+python sql_compare.py
+```
+
+## How to Verify Changes
+
+There is a small unit test suite under `tests/` (for example, `tests/test_sql_compare.py`). Verify changes by first running the unit tests, then the CLI smoke tests:
+
+```bash
+# Quick smoke test — should exit 0 (queries are canonically equivalent)
+python sql_compare.py examples/A.sql examples/B.sql --mode canonical
+
+# Verify exact mode detects differences — should exit 1
+python sql_compare.py examples/A.sql examples/B.sql --mode exact
+
+# Verify string comparison works
+python sql_compare.py --strings "SELECT 1" "SELECT 1" --mode exact
+```
+
+## Architecture Notes
+
+- **No external dependencies** — everything uses the Python standard library.
+- The tool supports three comparison modes: `exact`, `canonical`, and `both`.
+- Canonical comparison normalizes SQL by: stripping comments, collapsing whitespace, uppercasing outside quotes, sorting SELECT lists, sorting WHERE AND terms, and optionally reordering JOINs.
+- Exit code 0 = queries are equal; exit code 1 = queries differ.
+- GUI is optional and guarded behind a `try/except` import of `tkinter`.
+
+## Code Style
+
+- Python with type hints on function signatures.
+- Single-file architecture — all code lives in `sql_compare.py`.
+- Use standard library only — do not add third-party dependencies.
+- Python >= 3.8 — do not use syntax or stdlib features added after 3.8 (e.g., `match` statements, `str.removeprefix`, `tomllib`).
+
+## Code Commandment: TDD-First
+
+1. Derive test from expected outputs/behavior — not from implementation.
+2. Write test only. STOP.
+3. Present test. Await explicit approval.
+4. Only then write the implementation.
+
+> **TDD mode:** show test first, wait for approval, then implement.
