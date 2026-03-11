@@ -35,11 +35,11 @@ python sql_compare.py file1.sql file2.sql --mode canonical --report report.html
 
 See `docs/USAGE.md` for more details.
 
-## 3.1)  Code Commandment: TDD-First
+## Code Commandment: TDD-First
 
 1. Derive test from expected outputs/behavior — not from implementation.
 2. Write test only. STOP.
 3. Present test. Await explicit approval.
 4. Only then write the implementation.
 
-TDD mode: show test first, wait for approval, then implement.
+> **TDD mode:** show test first, wait for approval, then implement.
