@@ -1,5 +1,5 @@
 import unittest
-from sql_compare import canonicalize_joins, clause_end_index, tokenize
+from sql_compare import canonicalize_joins, clause_end_index, tokenize, top_level_find_kw
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -216,6 +216,35 @@ class TestClauseEndIndex(unittest.TestCase):
         sql = "SELECT * FROM my_table WHERE a = 1"
         self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
         self.assertEqual(clause_end_index(sql, sql.index("WHERE") + 1), len(sql))
+
+class TestTopLevelFindKw(unittest.TestCase):
+    def test_ignores_keywords_in_single_quotes(self):
+        sql = "SELECT 'WHERE' AS label FROM my_table WHERE a = 1"
+        self.assertEqual(top_level_find_kw(sql, "WHERE", 0), sql.rindex("WHERE"))
+
+    def test_ignores_keywords_in_double_quotes(self):
+        sql = 'SELECT "FROM" AS label FROM my_table WHERE a = 1'
+        self.assertEqual(top_level_find_kw(sql, "FROM", 0), sql.rindex("FROM"))
+
+    def test_ignores_keywords_in_brackets_and_backticks(self):
+        sql = "SELECT [WHERE] AS w, `FROM` AS f FROM t WHERE x = 1"
+        self.assertEqual(top_level_find_kw(sql, "WHERE", 0), sql.rindex("WHERE"))
+        self.assertEqual(top_level_find_kw(sql, "FROM", 0), sql.rindex("FROM"))
+
+    def test_skips_keywords_in_parenthesized_subqueries(self):
+        sql = "SELECT * FROM (SELECT col FROM inner_table WHERE z = 2) sub WHERE outer_col = 3"
+        self.assertEqual(top_level_find_kw(sql, "WHERE", 0), sql.rindex("WHERE"))
+
+    def test_start_offset_finds_next_top_level_keyword(self):
+        sql = "SELECT a FROM table1 WHERE a = 1 ORDER BY a"
+        select_idx = top_level_find_kw(sql, "SELECT", 0)
+        from_idx = top_level_find_kw(sql, "FROM", select_idx + len("SELECT"))
+        where_idx = top_level_find_kw(sql, "WHERE", from_idx + len("FROM"))
+        order_idx = top_level_find_kw(sql, "ORDER", where_idx + len("WHERE"))
+
+        self.assertEqual(from_idx, sql.index("FROM"))
+        self.assertEqual(where_idx, sql.index("WHERE"))
+        self.assertEqual(order_idx, sql.index("ORDER"))
 
 if __name__ == '__main__':
 
