@@ -275,7 +275,7 @@ def top_level_find_kw(sql: str, kw: str, start: int = 0):
     for m in pattern.finditer(sql, pos=start):
         candidate = m.start()
         mode, level = _advance_state(sql, prev, candidate, mode, level)
-        prev = candidate
+        prev = m.end()
         if mode is None and level == 0:
             return candidate
     return -1
