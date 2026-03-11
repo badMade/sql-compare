@@ -266,6 +266,15 @@ class TestStripSqlComments(unittest.TestCase):
         sql = "SELECT /**/ * FROM my_table;"
         expected = "SELECT  * FROM my_table;"
         self.assertEqual(strip_sql_comments(sql), expected)
+    def test_comment_like_sequences_in_strings(self):
+        """Ensures comment-like sequences in string literals are not stripped."""
+        with self.subTest("Line comment in string"):
+            sql = "SELECT 'This is -- not a comment' FROM my_table;"
+            self.assertEqual(strip_sql_comments(sql), sql)
+
+        with self.subTest("Block comment in string"):
+            sql = "SELECT 'This is /* not a comment */' FROM my_table;"
+            self.assertEqual(strip_sql_comments(sql), sql)
 
 
 class TestUppercaseOutsideQuotes(unittest.TestCase):
