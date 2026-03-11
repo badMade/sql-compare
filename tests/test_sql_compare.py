@@ -323,7 +323,7 @@ class TestSecurity(unittest.TestCase):
             'ws_a': '', 'ws_b': '', 'norm_a': 'SELECT 1', 'norm_b': 'SELECT 2',
             'can_a': 'SELECT 1', 'can_b': 'SELECT 2',
         }
-        with tempfile.NamedTemporaryFile(suffix='.html', delete=False, mode='w') as f:
+        with tempfile.NamedTemporaryFile(suffix='.html', delete=False, mode='w', encoding='utf-8') as f:
             tmp_path = f.name
         try:
             generate_report(result, 'both', 'html', tmp_path, False)
