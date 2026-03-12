@@ -311,21 +311,18 @@ class TestUppercaseOutsideQuotes(unittest.TestCase):
 
 
 class TestTopLevelFindKw(unittest.TestCase):
-    def test_ignores_keyword_inside_single_quotes(self):
-        sql = "SELECT 'WHERE' AS w FROM t WHERE id = 1"
-        self.assertEqual(top_level_find_kw(sql, "WHERE"), sql.rindex("WHERE"))
+    def test_ignores_keyword_in_various_contexts(self):
+        """Tests that keywords are ignored inside quotes, brackets, and parentheses."""
+        test_cases = [
+            ("single_quotes", "SELECT 'WHERE' AS w FROM t WHERE id = 1", "WHERE"),
+            ("double_quotes", 'SELECT "FROM" AS col FROM t', "FROM"),
+            ("brackets_and_backticks", "SELECT [WHERE], `WHERE` FROM t WHERE x = 1", "WHERE"),
+            ("parentheses", "SELECT id FROM (SELECT 1 AS x WHERE 1 = 1) sub WHERE id = 1", "WHERE"),
+        ]
 
-    def test_ignores_keyword_inside_double_quotes(self):
-        sql = 'SELECT "FROM" AS col FROM t'
-        self.assertEqual(top_level_find_kw(sql, "FROM"), sql.rindex("FROM"))
-
-    def test_ignores_keyword_inside_brackets_and_backticks(self):
-        sql = "SELECT [WHERE], `WHERE` FROM t WHERE x = 1"
-        self.assertEqual(top_level_find_kw(sql, "WHERE"), sql.rindex("WHERE"))
-
-    def test_ignores_keyword_inside_parentheses(self):
-        sql = "SELECT id FROM (SELECT 1 AS x WHERE 1 = 1) sub WHERE id = 1"
-        self.assertEqual(top_level_find_kw(sql, "WHERE"), sql.rindex("WHERE"))
+        for name, sql, keyword in test_cases:
+            with self.subTest(name=name):
+                self.assertEqual(top_level_find_kw(sql, keyword), sql.rindex(keyword))
 
     def test_start_offset_finds_next_top_level_keyword(self):
         sql = "SELECT * FROM t WHERE a = 1 ORDER BY a"
