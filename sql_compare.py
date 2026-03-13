@@ -836,7 +836,11 @@ def generate_report(result: dict, mode: str, fmt: str, out_path: str, ignore_ws:
             lines.append("---- Unified Diff (Canonicalized) ----")
             lines.append(result["diff_can"] if result["diff_can"] else "(no differences)")
             lines.append("")
-        Path(out_path).write_text("\n".join(lines), encoding="utf-8")
+        try:
+            Path(out_path).write_text("\n".join(lines), encoding="utf-8")
+        except (IOError, OSError) as e:
+            import sys
+            print(f"Error writing report to {out_path}: {e}", file=sys.stderr)
         return
 
     # HTML (color-coded)
@@ -896,7 +900,11 @@ table.diff thead th {{ background: #f6f8fa; }}
 </head><body>
 {''.join(sections)}
 </body></html>"""
-    Path(out_path).write_text(html_out, encoding="utf-8")
+    try:
+        Path(out_path).write_text(html_out, encoding="utf-8")
+    except (IOError, OSError) as e:
+        import sys
+        print(f"Error writing report to {out_path}: {e}", file=sys.stderr)
 
 
 # =============================
