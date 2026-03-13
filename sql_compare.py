@@ -70,11 +70,68 @@ def safe_read_file(path_str: str) -> str:
     return p.read_text(encoding="utf-8", errors="ignore")
 
 def strip_sql_comments(s: str) -> str:
-
-    """Remove -- line comments and /* ... */ block comments (non-nested)."""
-    s = re.sub(r"/\*.*?\*/", "", s, flags=re.S)
-    s = re.sub(r"--[^\n\r]*", "", s)
-    return s
+    """Remove -- line comments and /* ... */ block comments (non-nested) safely."""
+    out = []
+    i = 0
+    n = len(s)
+    mode = None  # 'single', 'double', 'bracket', 'backtick', 'line_comment', 'block_comment'
+    while i < n:
+        ch = s[i]
+        if mode is None:
+            if ch == "'":
+                mode = 'single'
+                out.append(ch)
+            elif ch == '"':
+                mode = 'double'
+                out.append(ch)
+            elif ch == '[':
+                mode = 'bracket'
+                out.append(ch)
+            elif ch == '`':
+                mode = 'backtick'
+                out.append(ch)
+            elif ch == '-' and i + 1 < n and s[i + 1] == '-':
+                mode = 'line_comment'
+                i += 1
+            elif ch == '/' and i + 1 < n and s[i + 1] == '*':
+                mode = 'block_comment'
+                i += 1
+            else:
+                out.append(ch)
+        elif mode == 'single':
+            out.append(ch)
+            if ch == "'":
+                if i + 1 < n and s[i + 1] == "'":
+                    out.append(s[i + 1])
+                    i += 1
+                else:
+                    mode = None
+        elif mode == 'double':
+            out.append(ch)
+            if ch == '"':
+                if i + 1 < n and s[i + 1] == '"':
+                    out.append(s[i + 1])
+                    i += 1
+                else:
+                    mode = None
+        elif mode == 'bracket':
+            out.append(ch)
+            if ch == ']':
+                mode = None
+        elif mode == 'backtick':
+            out.append(ch)
+            if ch == '`':
+                mode = None
+        elif mode == 'line_comment':
+            if ch in ('\n', '\r'):
+                mode = None
+                out.append(ch)
+        elif mode == 'block_comment':
+            if ch == '*' and i + 1 < n and s[i + 1] == '/':
+                mode = None
+                i += 1
+        i += 1
+    return "".join(out)
 
 
 def collapse_whitespace(s: str) -> str:
@@ -761,7 +818,9 @@ def parse_args(argv):
 
 
 def read_from_stdin_two_parts():
-    raw = sys.stdin.read()
+    raw = sys.stdin.read(MAX_FILE_SIZE_BYTES + 1)
+    if len(raw) > MAX_FILE_SIZE_BYTES:
+        raise ValueError(f"Input too large via stdin. Limit is {MAX_FILE_SIZE_MB} MB.")
     parts = re.split(r"^\s*---\s*$", raw, flags=re.M)
     if len(parts) != 2:
         raise ValueError("When using --stdin, provide exactly two parts separated by a line containing only ---")
