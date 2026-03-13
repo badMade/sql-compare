@@ -1,0 +1,13 @@
+🧹 [Code Health] Refactor patch_vulnerability.py to remove unused import and improve structure
+
+🎯 **What:**
+Removed the unused `import re` on line 1 of `patch_vulnerability.py`. Added a module-level docstring detailing the script's purpose. Encapsulated the patch execution logic into a `main() -> None` function and added the standard `if __name__ == "__main__":` entrypoint.
+
+💡 **Why:**
+Removing the unused import improves readability and prevents linting tools from flagging the file. Encapsulating the logic within a `main()` function prevents the global namespace from being polluted with temporary variables like `content` and `safe_read_code`, making the script more modular and aligned with standard Python conventions. The type hint (`-> None`) improves maintainability.
+
+✅ **Verification:**
+Ran `python -m py_compile patch_vulnerability.py` to ensure the syntax remains valid and compiles successfully without errors. Ran `python patch_vulnerability.py` locally and confirmed that the file still executes successfully and performs the expected string replacement on `sql_compare.py`. Verified that no other tests or functionalities in the core application were broken by this change by running the unit test suite (`python -m unittest discover tests/`). *Note: Local changes to `sql_compare.py` during testing were reverted to keep the PR focused.*
+
+✨ **Result:**
+`patch_vulnerability.py` is cleaner, adheres to better Python scripting practices, and is free of unused dependencies.
