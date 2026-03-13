@@ -1,0 +1,4 @@
+
+## 2024-03-13 - [Performance] O(N^2) slowdowns from character-by-character loops with regex slicing
+**Learning:** In Python, performing character-by-character iteration while simultaneously calling `re.match(pattern, string[i:])` creates an O(N^2) performance bottleneck due to continuous string slicing and redundant regex engine invocations. This is especially true for SQL string tokenization where checking for keywords character-by-character can be devastatingly slow on long inputs.
+**Action:** Replace linear `while` loops containing string slicing (`string[i:]`) with a single, comprehensive compiled regex and use `re.finditer` to scan the string in O(N) time. The regex should leverage capturing groups to handle state transitions (like entering/exiting quoted strings or parentheses) and keyword extraction simultaneously.
