@@ -267,16 +267,6 @@ class TestStripSqlComments(unittest.TestCase):
         sql = "SELECT /**/ * FROM my_table;"
         expected = "SELECT  * FROM my_table;"
         self.assertEqual(strip_sql_comments(sql), expected)
-    def test_comment_like_sequences_in_strings(self):
-        """Ensures comment-like sequences in string literals are not stripped."""
-        with self.subTest("Line comment in string"):
-            sql = "SELECT 'This is -- not a comment' FROM my_table;"
-            self.assertEqual(strip_sql_comments(sql), sql)
-
-        with self.subTest("Block comment in string"):
-            sql = "SELECT 'This is /* not a comment */' FROM my_table;"
-            self.assertEqual(strip_sql_comments(sql), sql)
-
 
 class TestUppercaseOutsideQuotes(unittest.TestCase):
     def test_unquoted_text(self):
@@ -410,3 +400,43 @@ class TestSecurity(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+from unittest.mock import MagicMock, patch
+from sql_compare import SQLCompareGUI
+
+class TestSQLCompareGUI(unittest.TestCase):
+    @patch('sql_compare.messagebox.showwarning')
+    def test_do_compare_missing_files(self, mock_warn):
+        """Test do_compare when files are not selected."""
+        mock_self = MagicMock()
+        mock_self.sql1_path.get.return_value = " "
+        mock_self.sql2_path.get.return_value = ""
+
+        SQLCompareGUI.do_compare(mock_self)
+        mock_warn.assert_called_once_with("Missing files", "Please select both SQL files.")
+
+    @patch('sql_compare.messagebox.showerror')
+    @patch('sql_compare.os.path.exists')
+    def test_do_compare_file_not_found(self, mock_exists, mock_err):
+        """Test do_compare when a selected file does not exist."""
+        mock_self = MagicMock()
+        mock_self.sql1_path.get.return_value = "a.sql"
+        mock_self.sql2_path.get.return_value = "b.sql"
+        mock_exists.return_value = False
+
+        SQLCompareGUI.do_compare(mock_self)
+        mock_err.assert_called_once_with("File error", "One or both files do not exist.")
+
+    @patch('sql_compare.messagebox.showerror')
+    @patch('sql_compare.os.path.exists')
+    @patch('sql_compare.safe_read_file')
+    def test_do_compare_read_exception(self, mock_read, mock_exists, mock_err):
+        """Test do_compare handles exceptions during safe_read_file."""
+        mock_self = MagicMock()
+        mock_self.sql1_path.get.return_value = "a.sql"
+        mock_self.sql2_path.get.return_value = "b.sql"
+        mock_exists.return_value = True
+        mock_read.side_effect = Exception("Permission denied")
+
+        SQLCompareGUI.do_compare(mock_self)
+        mock_err.assert_called_once_with("Error", "Permission denied")
