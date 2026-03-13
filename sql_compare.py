@@ -82,55 +82,35 @@ def collapse_whitespace(s: str) -> str:
     return WHITESPACE_REGEX.sub(" ", s).strip()
 
 
+
+# Pattern matches any of the supported quoted string types
+QUOTED_STRING_REGEX = re.compile(
+    r"('(?:''|[^'])*')|(\"(?:\"\"|[^\"])*\")|(\[[^\]]*\])|(`[^`]*`)"
+)
+
 def uppercase_outside_quotes(s: str) -> str:
     """
     Uppercase characters outside of quoted regions:
       single quotes '...'; double quotes "..."; [brackets]; `backticks`
+
+    Uses re.finditer for performance to jump between quote tokens instead of linear scanning.
     """
-    out = []
-    i = 0
-    mode = None  # 'single', 'double', 'bracket', 'backtick'
-    while i < len(s):
-        ch = s[i]
-        if mode is None:
-            if ch == "'":
-                mode = 'single'
-                out.append(ch)
-            elif ch == '"':
-                mode = 'double'
-                out.append(ch)
-            elif ch == '[':
-                mode = 'bracket'
-                out.append(ch)
-            elif ch == '`':
-                mode = 'backtick'
-                out.append(ch)
-            else:
-                out.append(ch.upper())
-        elif mode == 'single':
-            out.append(ch)
-            if ch == "'":
-                if i + 1 < len(s) and s[i + 1] == "'":
-                    out.append(s[i + 1]); i += 1
-                else:
-                    mode = None
-        elif mode == 'double':
-            out.append(ch)
-            if ch == '"':
-                if i + 1 < len(s) and s[i + 1] == '"':
-                    out.append(s[i + 1]); i += 1
-                else:
-                    mode = None
-        elif mode == 'bracket':
-            out.append(ch)
-            if ch == ']':
-                mode = None
-        elif mode == 'backtick':
-            out.append(ch)
-            if ch == '`':
-                mode = None
-        i += 1
-    return "".join(out)
+    parts = []
+    last_end = 0
+    for match in QUOTED_STRING_REGEX.finditer(s):
+        start, end = match.span()
+        # Add the non-quoted part in uppercase
+        if start > last_end:
+            parts.append(s[last_end:start].upper())
+        # Add the quoted part as-is
+        parts.append(match.group(0))
+        last_end = end
+
+    # Add any remaining non-quoted part
+    if last_end < len(s):
+        parts.append(s[last_end:].upper())
+
+    return "".join(parts)
 
 
 def remove_trailing_semicolon(s: str) -> str:
