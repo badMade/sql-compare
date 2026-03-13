@@ -410,3 +410,67 @@ class TestSecurity(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class TestGenerateReport(unittest.TestCase):
+    def test_generate_report_ioerror_txt(self):
+        """Verify that generate_report gracefully handles IOErrors for TXT format."""
+        from sql_compare import generate_report
+        import sys
+        from unittest.mock import patch
+
+        result = {
+            'ws_equal': True, 'exact_equal': False, 'canonical_equal': False,
+            'summary': ['summary line'],
+            'diff_ws': '', 'diff_norm': '', 'diff_can': '',
+            'ws_a': '', 'ws_b': '', 'norm_a': 'SELECT 1', 'norm_b': 'SELECT 2',
+            'can_a': 'SELECT 1', 'can_b': 'SELECT 2',
+        }
+
+        from io import StringIO
+        import contextlib
+
+        err_out = StringIO()
+        with patch('pathlib.Path.write_text', side_effect=IOError("Mocked IO Error")) as mock_write, \
+             contextlib.redirect_stderr(err_out):
+
+            # Calling the function, expecting it not to raise an exception
+            generate_report(result, 'both', 'txt', '/invalid/path/report.txt', False)
+
+            # Verifying write_text was called
+            mock_write.assert_called_once()
+
+            # Verifying the error message was printed to stderr
+            self.assertIn("Error writing report to /invalid/path/report.txt: Mocked IO Error", err_out.getvalue())
+
+    def test_generate_report_ioerror_html(self):
+        """Verify that generate_report gracefully handles IOErrors for HTML format."""
+        from sql_compare import generate_report
+        import sys
+        from unittest.mock import patch
+
+        result = {
+            'ws_equal': True, 'exact_equal': False, 'canonical_equal': False,
+            'summary': ['summary line'],
+            'diff_ws': '', 'diff_norm': '', 'diff_can': '',
+            'ws_a': '', 'ws_b': '', 'norm_a': 'SELECT 1', 'norm_b': 'SELECT 2',
+            'can_a': 'SELECT 1', 'can_b': 'SELECT 2',
+        }
+
+        from io import StringIO
+        import contextlib
+
+        err_out = StringIO()
+        with patch('pathlib.Path.write_text', side_effect=OSError("Mocked OS Error")) as mock_write, \
+             contextlib.redirect_stderr(err_out):
+
+            # Calling the function, expecting it not to raise an exception
+            generate_report(result, 'both', 'html', '/invalid/path/report.html', False)
+
+            # Verifying write_text was called
+            mock_write.assert_called_once()
+
+            # Verifying the error message was printed to stderr
+            self.assertIn("Error writing report to /invalid/path/report.html: Mocked OS Error", err_out.getvalue())
+
+if __name__ == '__main__':
+    unittest.main()
