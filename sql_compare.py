@@ -82,54 +82,31 @@ def collapse_whitespace(s: str) -> str:
     return WHITESPACE_REGEX.sub(" ", s).strip()
 
 
+QUOTED_STRING_REGEX = re.compile(
+    r"""
+    '(?:''|[^'])*(?:'|$)
+  | "(?:""|[^"])*(?:"|$)
+  | \[[^\]]*(?:\]|$)
+  | `[^`]*(?:`|$)
+    """,
+    re.VERBOSE
+)
+
 def uppercase_outside_quotes(s: str) -> str:
     """
     Uppercase characters outside of quoted regions:
       single quotes '...'; double quotes "..."; [brackets]; `backticks`
     """
     out = []
-    i = 0
-    mode = None  # 'single', 'double', 'bracket', 'backtick'
-    while i < len(s):
-        ch = s[i]
-        if mode is None:
-            if ch == "'":
-                mode = 'single'
-                out.append(ch)
-            elif ch == '"':
-                mode = 'double'
-                out.append(ch)
-            elif ch == '[':
-                mode = 'bracket'
-                out.append(ch)
-            elif ch == '`':
-                mode = 'backtick'
-                out.append(ch)
-            else:
-                out.append(ch.upper())
-        elif mode == 'single':
-            out.append(ch)
-            if ch == "'":
-                if i + 1 < len(s) and s[i + 1] == "'":
-                    out.append(s[i + 1]); i += 1
-                else:
-                    mode = None
-        elif mode == 'double':
-            out.append(ch)
-            if ch == '"':
-                if i + 1 < len(s) and s[i + 1] == '"':
-                    out.append(s[i + 1]); i += 1
-                else:
-                    mode = None
-        elif mode == 'bracket':
-            out.append(ch)
-            if ch == ']':
-                mode = None
-        elif mode == 'backtick':
-            out.append(ch)
-            if ch == '`':
-                mode = None
-        i += 1
+    prev = 0
+    for m in QUOTED_STRING_REGEX.finditer(s):
+        start, end = m.span()
+        if start > prev:
+            out.append(s[prev:start].upper())
+        out.append(m.group(0))
+        prev = end
+    if prev < len(s):
+        out.append(s[prev:].upper())
     return "".join(out)
 
 
