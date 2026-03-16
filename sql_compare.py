@@ -1012,7 +1012,9 @@ class SQLCompareGUI:
 
     def clear_output(self):
         self.txt.delete("1.0", "end")
-        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
+    def clear_output(self):
+        self.txt.delete("1.0", "end")
+        self._set_empty_placeholder()
         self.btn_copy.state(['disabled'])
         self.btn_clear.state(['disabled'])
         self.btn_save.state(['disabled'])
