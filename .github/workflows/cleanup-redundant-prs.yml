@@ -1,0 +1,48 @@
+name: Cleanup Redundant PRs
+
+on:
+  push:
+    branches:
+      - claude/remove-redundant-prs-*
+
+jobs:
+  close-redundant-prs:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Close redundant PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const redundantPRs = [
+              // Sentinel XSS (keep #138)
+              136, 133, 129, 126, 124, 121,
+              // Sentinel DoS (keep #179)
+              178, 175, 166,
+              // Palette empty-state UX (keep #180)
+              177, 176, 168, 157, 139, 137, 132, 131, 128, 125, 122,
+              // Bolt optimize top_level_find_kw (keep #134)
+              130, 127, 123, 120
+            ];
+
+            for (const pr of redundantPRs) {
+              try {
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr,
+                  state: 'closed'
+                });
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr,
+                  body: 'Closing as redundant — a newer PR addresses the same issue.'
+                });
+                console.log(`Closed PR #${pr}`);
+              } catch (e) {
+                console.log(`Failed to close PR #${pr}: ${e.message}`);
+              }
+            }
+            console.log('Done closing redundant PRs.');
