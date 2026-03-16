@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import unittest
 import tkinter as tk
 from sql_compare import SQLCompareGUI
@@ -5,7 +9,6 @@ from sql_compare import SQLCompareGUI
 class TestGUIEmptyState(unittest.TestCase):
     def setUp(self):
         self.root = tk.Tk()
-        self.root.withdraw()
         self.gui = SQLCompareGUI(self.root)
 
     def tearDown(self):
@@ -13,15 +16,12 @@ class TestGUIEmptyState(unittest.TestCase):
 
     def test_initial_empty_state(self):
         # Assert tag exists and has correct config
-        with self.subTest(msg="Check foreground color"):
-            self.assertEqual(self.gui.txt.tag_cget("empty", "foreground"), "gray")
-        with self.subTest(msg="Check justification"):
-            self.assertEqual(self.gui.txt.tag_cget("empty", "justify"), "center")
+        self.assertEqual(self.gui.txt.tag_cget("empty", "foreground"), "gray")
+        self.assertEqual(self.gui.txt.tag_cget("empty", "justify"), "center")
 
         # Check that the inserted text has the 'empty' tag
-        with self.subTest(msg="Check tag is applied"):
-            tags = self.gui.txt.tag_names("1.0")
-            self.assertIn("empty", tags)
+        tags = self.gui.txt.tag_names("1.0")
+        self.assertIn("empty", tags)
 
     def test_clear_output_empty_state(self):
         # Insert some dummy non-empty text
