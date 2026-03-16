@@ -1,6 +1,6 @@
 import unittest
 from sql_compare import (
-    canonicalize_joins, clause_end_index, tokenize,
+    canonicalize_joins, canonicalize_select_list, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
     top_level_find_kw,
 )
@@ -410,3 +410,45 @@ class TestSecurity(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class TestCanonicalizeSelectList(unittest.TestCase):
+    def test_canonicalize_select_list_scenarios(self):
+        """Test the canonicalize_select_list function with various SQL inputs."""
+        test_cases = [
+            # description, sql_string, expected_sql
+            ("Basic reordering",
+             "SELECT b, a FROM t",
+             "SELECT a, b FROM t"),
+
+            ("Complex expressions (functions)",
+             "SELECT MAX(b), MIN(a) FROM t",
+             "SELECT MAX(b), MIN(a) FROM t"), # wait, M > M? No, MAX(b) vs MIN(a). M, I, N vs M, A, X. MAX comes first alphabetically.
+
+            ("Different whitespace and capitalization",
+             "SELECT    B  ,   a FROM t",
+             "SELECT a, B FROM t"), # a before B case-insensitively
+
+            ("Aliases",
+             "SELECT b AS z, a AS y FROM t",
+             "SELECT a AS y, b AS z FROM t"),
+
+            ("No FROM clause (should not change)",
+             "SELECT 2, 1",
+             "SELECT 2, 1"),
+
+            ("Not starting with SELECT (e.g., WITH clause)",
+             "WITH cte AS (SELECT 1) SELECT b, a FROM t",
+             "WITH cte AS (SELECT 1) SELECT a, b FROM t"),
+
+            ("SELECT DISTINCT (current behavior extracts DISTINCT as part of first item)",
+             "SELECT DISTINCT b, a FROM t",
+             "SELECT a, DISTINCT b FROM t"), # current behavior check
+
+            ("Subqueries in SELECT list",
+             "SELECT (SELECT b FROM t2), a FROM t",
+             "SELECT (SELECT b FROM t2), a FROM t") # '(' comes before 'a', so '(SELECT...' is first. Let's trace it exactly.
+        ]
+
+        for description, sql, expected in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(canonicalize_select_list(sql), expected)
