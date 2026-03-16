@@ -20,7 +20,7 @@ if [[ "${1:-}" == "--dry-run" ]]; then
 fi
 
 # ── Redundant PR groups ──────────────────────────────────────────────
-# Each group: first line = kept PR, remaining lines = redundant PRs to close
+# Each group lists redundant PR numbers to close; the kept PR is noted in the comment above.
 
 # Sentinel XSS fixes — keep #138
 XSS_CLOSE=(136 133 129 126 124 121)
