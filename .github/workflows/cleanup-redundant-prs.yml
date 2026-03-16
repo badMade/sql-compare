@@ -16,14 +16,8 @@ jobs:
         with:
           script: |
             const redundantPRs = [
-              // Sentinel XSS (keep #138)
-              136, 133, 129, 126, 124, 121,
-              // Sentinel DoS (keep #179)
-              178, 175, 166,
-              // Palette empty-state UX (keep #180)
-              177, 176, 168, 157, 139, 137, 132, 131, 128, 125, 122,
-              // Bolt optimize top_level_find_kw (keep #134)
-              130, 127, 123, 120
+              // Bolt: uppercase_outside_quotes regex optimization (keep #174)
+              164
             ];
 
             for (const pr of redundantPRs) {
