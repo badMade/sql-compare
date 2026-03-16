@@ -368,59 +368,60 @@ def canonicalize_where_and(sql: str) -> str:
     return collapse_whitespace(s)
 
 
+FROM_BODY_TOKENIZER_RE = re.compile(
+    r"""
+    (
+        '(?:''|[^'])*'            # Single quote (group 1)
+      | "(?:""|[^"])*"            # Double quote (group 1)
+      | \[(?:[^\]]*)\]            # Bracket (group 1)
+      | `(?:[^`]*)`               # Backtick (group 1)
+    )
+    | (\()                        # Open paren (group 2)
+    | (\))                        # Close paren (group 3)
+    | \b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b # JOIN (group 4)
+    | \b(ON|USING)\b              # ON/USING (group 5)
+    """,
+    re.VERBOSE | re.IGNORECASE
+)
+
 def _tokenize_from_clause_body(body: str) -> list:
-    i = 0
-    n = len(body)
-    mode = None
     level = 0
     tokens = []
-    buf = []
-    def flush_buf():
-        nonlocal buf
-        if buf:
-            tokens.append(("TEXT", collapse_whitespace("".join(buf)).strip()))
-            buf = []
+    last_end = 0
 
-    while i < n:
-        ch = body[i]
-        if mode is None:
-            if ch == "'": mode = 'single'
-            elif ch == '"': mode = 'double'
-            elif ch == '[': mode = 'bracket'
-            elif ch == '`': mode = 'backtick'
-            elif ch == '(':
-                level += 1
-            elif ch == ')':
-                level = max(0, level - 1)
-            if level == 0:
-                m = re.match(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", body[i:], flags=re.I)
-                if m:
-                    flush_buf()
-                    tokens.append(("JOINKW", collapse_whitespace(m.group(1)).upper()))
-                    i += m.end()
-                    continue
-                m2 = re.match(r"\b(ON|USING)\b", body[i:], flags=re.I)
-                if m2:
-                    flush_buf()
-                    tokens.append(("CONDKW", m2.group(1).upper()))
-                    i += m2.end()
-                    continue
-        else:
-            if mode == 'single' and ch == "'":
-                if i + 1 < n and body[i + 1] == "'": buf.append(ch); i += 1
-                else: mode = None
-            elif mode == 'double' and ch == '"':
-                if i + 1 < n and body[i + 1] == '"': buf.append(ch); i += 1
-                else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
-        buf.append(ch)
-        i += 1
-    flush_buf()
+    for match in FROM_BODY_TOKENIZER_RE.finditer(body):
+        is_open = match.group(2)
+        is_close = match.group(3)
+        joinkw = match.group(4)
+        condkw = match.group(5)
+
+        if is_open:
+            level += 1
+        elif is_close:
+            level = max(0, level - 1)
+
+        if level == 0:
+            if joinkw:
+                text_part = body[last_end:match.start()]
+                text_part_collapsed = collapse_whitespace(text_part).strip()
+                if text_part_collapsed:
+                    tokens.append(("TEXT", text_part_collapsed))
+                tokens.append(("JOINKW", collapse_whitespace(joinkw).upper()))
+                last_end = match.end()
+            elif condkw:
+                text_part = body[last_end:match.start()]
+                text_part_collapsed = collapse_whitespace(text_part).strip()
+                if text_part_collapsed:
+                    tokens.append(("TEXT", text_part_collapsed))
+                tokens.append(("CONDKW", collapse_whitespace(condkw).upper()))
+                last_end = match.end()
+
+    remaining = body[last_end:]
+    remaining_collapsed = collapse_whitespace(remaining).strip()
+    if remaining_collapsed:
+        tokens.append(("TEXT", remaining_collapsed))
+
     return tokens
-
-
 def _extract_base_table(tokens: list) -> tuple:
     base = ""
     idx = 0

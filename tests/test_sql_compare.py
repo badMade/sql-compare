@@ -410,3 +410,16 @@ class TestSecurity(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class TestTokenizeFromClauseBody(unittest.TestCase):
+    def test_basic_tokenize(self):
+        body = "t1 JOIN t2 ON t1.id = t2.id"
+        from sql_compare import _tokenize_from_clause_body
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(tokens, [('TEXT', 't1'), ('JOINKW', 'JOIN'), ('TEXT', 't2'), ('CONDKW', 'ON'), ('TEXT', 't1.id = t2.id')])
+
+    def test_tokenize_with_parens(self):
+        body = "t1 LEFT JOIN (t2 JOIN t3 ON t2.id = t3.id) ON t1.id = t2.id"
+        from sql_compare import _tokenize_from_clause_body
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(tokens, [('TEXT', 't1'), ('JOINKW', 'LEFT JOIN'), ('TEXT', '(t2 JOIN t3 ON t2.id = t3.id)'), ('CONDKW', 'ON'), ('TEXT', 't1.id = t2.id')])

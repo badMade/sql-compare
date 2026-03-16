@@ -3,6 +3,10 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
+import tkinter as tk
+from sql_compare import SQLCompareGUI
+
+class TestGUIEmptyState(unittest.TestCase):
     def setUp(self):
         try:
             self.root = tk.Tk()
