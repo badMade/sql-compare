@@ -12,12 +12,15 @@ class TestGUIEmptyState(unittest.TestCase):
 
     def test_initial_empty_state(self):
         # Assert tag exists and has correct config
-        self.assertEqual(self.gui.txt.tag_cget("empty", "foreground"), "gray")
-        self.assertEqual(self.gui.txt.tag_cget("empty", "justify"), "center")
+        with self.subTest(msg="Check foreground color"):
+            self.assertEqual(self.gui.txt.tag_cget("empty", "foreground"), "gray")
+        with self.subTest(msg="Check justification"):
+            self.assertEqual(self.gui.txt.tag_cget("empty", "justify"), "center")
 
         # Check that the inserted text has the 'empty' tag
-        tags = self.gui.txt.tag_names("1.0")
-        self.assertIn("empty", tags)
+        with self.subTest(msg="Check tag is applied"):
+            tags = self.gui.txt.tag_names("1.0")
+            self.assertIn("empty", tags)
 
     def test_clear_output_empty_state(self):
         # Insert some dummy non-empty text
