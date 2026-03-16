@@ -988,6 +988,15 @@ class SQLCompareGUI:
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
+
+        def _readonly_handler(event):
+            if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Prior', 'Next', 'Home', 'End'):
+                return None
+            if event.keysym.lower() in ('c', 'a') and (event.state & 4 or event.state & 8):
+                return None
+            return "break"
+
+        self.txt.bind("<Key>", _readonly_handler)
         self.txt.tag_configure("empty", foreground="gray", justify="center")
         self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
 
