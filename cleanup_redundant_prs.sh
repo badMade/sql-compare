@@ -9,14 +9,39 @@
 #
 # Requires: gh CLI authenticated with repo access
 #
-# Usage: bash cleanup_redundant_prs.sh [--dry-run]
+# Usage: bash cleanup_redundant_prs.sh [--dry-run] [--yes]
 
 set -euo pipefail
 
 DRY_RUN=false
-if [[ "${1:-}" == "--dry-run" ]]; then
-  DRY_RUN=true
-  echo "=== DRY RUN MODE ==="
+YES=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)
+      DRY_RUN=true
+      echo "=== DRY RUN MODE ==="
+      ;;
+    --yes)
+      YES=true
+      ;;
+    -h|--help)
+      echo "Usage: bash cleanup_redundant_prs.sh [--dry-run] [--yes]"
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      echo "Usage: bash cleanup_redundant_prs.sh [--dry-run] [--yes]" >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+if ! $DRY_RUN && ! $YES; then
+  echo "Refusing to close PRs without explicit confirmation."
+  echo "Re-run with --dry-run to preview, or with --yes to proceed."
+  exit 1
 fi
 
 # ── Redundant PR groups ──────────────────────────────────────────────
