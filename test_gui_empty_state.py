@@ -5,6 +5,7 @@ from sql_compare import SQLCompareGUI
 class TestGUIEmptyState(unittest.TestCase):
     def setUp(self):
         self.root = tk.Tk()
+        self.root.withdraw()
         self.gui = SQLCompareGUI(self.root)
 
     def tearDown(self):
