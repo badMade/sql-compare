@@ -17,7 +17,7 @@ class TestGUIEmptyState(unittest.TestCase):
     def tearDown(self):
         try:
             self.root.destroy()
-        except:
+        except (tk.TclError, AttributeError):
             pass
 
     def test_initial_empty_state(self):
