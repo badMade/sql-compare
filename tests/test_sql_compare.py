@@ -456,9 +456,14 @@ class TestRemoveOuterParentheses(unittest.TestCase):
     def test_empty_string(self):
         """Should handle empty strings and whitespace correctly."""
         from sql_compare import remove_outer_parentheses
-        self.assertEqual(remove_outer_parentheses(""), "")
-        self.assertEqual(remove_outer_parentheses("()"), "")
-        self.assertEqual(remove_outer_parentheses(" ( ) "), "")
+        cases = {
+            "empty string": ("", ""),
+            "empty parentheses": ("()", ""),
+            "empty parentheses with whitespace": (" ( ) ", ""),
+        }
+        for name, (sql, expected) in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(remove_outer_parentheses(sql), expected)
 
 if __name__ == '__main__':
     unittest.main()
