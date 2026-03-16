@@ -408,8 +408,6 @@ class TestSecurity(unittest.TestCase):
             os.unlink(tmp_path)
 
 
-
-
 class TestRemoveOuterParentheses(unittest.TestCase):
     def test_basic_single_layer(self):
         """Should remove a single layer of outer parentheses."""
