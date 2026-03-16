@@ -3,20 +3,28 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
-import tkinter as tk
 
-import unittest
+TK_AVAILABLE = False
+try:
+    import tkinter as tk
+    from sql_compare import SQLCompareGUI
+    TK_AVAILABLE = True
+except ImportError:
+    pass
 
+@unittest.skipUnless(TK_AVAILABLE, "Tkinter not available")
 class TestGUIEmptyState(unittest.TestCase):
     def setUp(self):
         try:
             self.root = tk.Tk()
+            self.root.withdraw()
+            self.gui = SQLCompareGUI(self.root)
         except tk.TclError:
             self.skipTest("Skipping GUI tests because Tkinter display is not available")
-        self.gui = SQLCompareGUI(self.root)
 
     def tearDown(self):
-        self.root.destroy()
+        if hasattr(self, 'root'):
+            self.root.destroy()
 
     def test_initial_empty_state(self):
         # Assert tag exists and has correct config
