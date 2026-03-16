@@ -989,7 +989,8 @@ class SQLCompareGUI:
         xscroll.grid(row=1, column=0, sticky="ew")
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
         self.txt.tag_configure("empty", foreground="gray", justify="center")
-        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
+        self.EMPTY_PLACEHOLDER = "Select files and click Compare to see results here."
+        self.txt.insert("1.0", self.EMPTY_PLACEHOLDER, "empty")
 
     def _toggle_join_options(self):
         # Enable/disable dependent flags based on global join toggle
@@ -1012,7 +1013,12 @@ class SQLCompareGUI:
 
     def clear_output(self):
         self.txt.delete("1.0", "end")
-    def clear_output(self):
+        # Reinsert the placeholder using a single shared attribute to avoid duplication.
+        self.txt.insert("1.0", self.EMPTY_PLACEHOLDER, "empty")
+        # Reset button states to the initial (disabled) state.
+        self.btn_copy.state(['disabled'])
+        self.btn_clear.state(['disabled'])
+        self.btn_save.state(['disabled'])
         self.txt.delete("1.0", "end")
         self._set_empty_placeholder()
         self.btn_copy.state(['disabled'])
