@@ -575,7 +575,12 @@ def _select_items(sql: str):
     fi = top_level_find_kw(s, "FROM", si + 6)
     if fi == -1: return []
     lst = s[si + 6:fi].strip()
-    items = [collapse_whitespace(x).upper() for x in split_top_level(lst, ",")]
+
+    items = []
+    for x in split_top_level(lst, ","):
+        val = collapse_whitespace(x).upper()
+        if val:
+            items.append(val)
     return items
 
 

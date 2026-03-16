@@ -408,5 +408,38 @@ class TestSecurity(unittest.TestCase):
             os.unlink(tmp_path)
 
 
+
+class TestSelectItems(unittest.TestCase):
+    def test_select_items(self):
+        from sql_compare import _select_items
+        cases = [
+            # Standard columns
+            ("SELECT a, b FROM t", ["A", "B"]),
+            # Commas inside strings
+            ("SELECT a, 'hello, world' FROM t", ["A", "'HELLO, WORLD'"]),
+            # Commas inside functions
+            ("SELECT a, COALESCE(b, c) FROM t", ["A", "COALESCE(B, C)"]),
+            # Nested functions
+            ("SELECT FUNC1(FUNC2(a, b), c) FROM t", ["FUNC1(FUNC2(A, B), C)"]),
+            # Aliases
+            ("SELECT a AS b, func(c, d) AS e FROM t", ["A AS B", "FUNC(C, D) AS E"]),
+            # Trailing comma (malformed)
+            ("SELECT a, b, FROM t", ["A", "B"]),
+            # Empty input / no columns
+            ("SELECT FROM t", []),
+            # Brackets and backticks
+            ("SELECT [a, b], `c, d` FROM t", ["[A, B]", "`C, D`"]),
+            # Extra whitespace
+            ("SELECT    a  ,   b    FROM t", ["A", "B"]),
+            # Missing FROM (returns [])
+            ("SELECT a, b", []),
+            # Missing SELECT (returns [])
+            ("a, b FROM t", [])
+        ]
+
+        for sql, expected in cases:
+            with self.subTest(sql=sql):
+                self.assertEqual(_select_items(sql), expected)
+
 if __name__ == '__main__':
     unittest.main()
