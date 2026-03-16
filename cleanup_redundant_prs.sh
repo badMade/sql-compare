@@ -59,7 +59,10 @@ PALETTE_CLOSE=(177 176 168 157 139 137 132 131 128 125 122)
 # Bolt optimize top_level_find_kw — keep #134
 BOLT_CLOSE=(130 127 123 120)
 
-ALL_CLOSE=("${XSS_CLOSE[@]}" "${DOS_CLOSE[@]}" "${PALETTE_CLOSE[@]}" "${BOLT_CLOSE[@]}")
+# Bolt optimize other functions (uppercase_outside_quotes, tokenize) — keep #134
+BOLT_OTHER_CLOSE=(174 173 164)
+
+ALL_CLOSE=("${XSS_CLOSE[@]}" "${DOS_CLOSE[@]}" "${PALETTE_CLOSE[@]}" "${BOLT_CLOSE[@]}" "${BOLT_OTHER_CLOSE[@]}")
 
 # Define kept PRs and specific comments for each group
 KEPT_PR_XSS=138
@@ -80,6 +83,7 @@ echo "Sentinel XSS (keep #138):          close ${XSS_CLOSE[*]}"
 echo "Sentinel DoS (keep #179):          close ${DOS_CLOSE[*]}"
 echo "Palette empty-state (keep #180):   close ${PALETTE_CLOSE[*]}"
 echo "Bolt optimize (keep #134):         close ${BOLT_CLOSE[*]}"
+echo "Bolt other perf (keep #134):       close ${BOLT_OTHER_CLOSE[*]}"
 echo ""
 
 closed=0
