@@ -447,7 +447,8 @@ class TestRemoveOuterParentheses(unittest.TestCase):
     def test_parentheses_inside_strings(self):
         """Should not be confused by parentheses inside quoted strings."""
         from sql_compare import remove_outer_parentheses
-        # The string starts with ( and ends with ), but the parentheses do not match each other structurally at the top level
+        # The string starts with ( and ends with ), and the outer parentheses fully wrap the statement;
+        # inner parentheses appear only inside the quoted string and must be ignored structurally.
         sql = "('()')"
         self.assertEqual(remove_outer_parentheses(sql), "'()'")
 
