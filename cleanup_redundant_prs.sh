@@ -52,7 +52,7 @@ for pr in "${ALL_CLOSE[@]}"; do
     echo "[dry-run] Would close PR #${pr}"
   else
     if gh pr close "$pr" --repo badMade/sql-compare \
-         --comment "Closing as redundant — a newer PR addresses the same issue." 2>/dev/null; then
+         --comment "Closing as redundant — a newer PR addresses the same issue."; then
       echo "✓ Closed PR #${pr}"
       ((closed++))
     else
