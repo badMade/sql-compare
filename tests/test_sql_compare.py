@@ -384,6 +384,25 @@ class TestTopLevelFindKw(unittest.TestCase):
 
 
 class TestSecurity(unittest.TestCase):
+    def test_stdin_dos_prevention(self):
+        """Verify that stdin reading limits input size to prevent memory exhaustion (DoS)."""
+        import sys
+        import io
+        from unittest.mock import patch
+        from sql_compare import read_from_stdin_two_parts
+
+        class MockStdin(io.StringIO):
+            def read(self, size=-1):
+                if size == -1:
+                    return "A" * (20 * 1024 * 1024 + 1)
+                return "A" * size
+
+        with patch("sys.stdin", new=MockStdin()):
+            with self.assertRaises(ValueError) as context:
+                read_from_stdin_two_parts()
+
+        self.assertIn("too large", str(context.exception))
+
     def test_xss_in_html_report_summary(self):
         """Verify that XSS payloads in summary lines are escaped in HTML output."""
         import tempfile, os
