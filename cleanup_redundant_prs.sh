@@ -54,10 +54,10 @@ for pr in "${ALL_CLOSE[@]}"; do
     if gh pr close "$pr" --repo badMade/sql-compare \
          --comment "Closing as redundant — a newer PR addresses the same issue."; then
       echo "✓ Closed PR #${pr}"
-      ((closed++))
+      ((closed+=1))
     else
       echo "✗ Failed to close PR #${pr}"
-      ((failed++))
+      ((failed+=1))
     fi
   fi
 done
