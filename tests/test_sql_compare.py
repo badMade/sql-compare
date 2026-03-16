@@ -432,11 +432,13 @@ class TestRemoveOuterParentheses(unittest.TestCase):
     def test_unmatched_parentheses(self):
         """Should return the string unmodified if parentheses are not matched at the ends."""
         from sql_compare import remove_outer_parentheses
-        sql = "(SELECT * FROM t"
-        self.assertEqual(remove_outer_parentheses(sql), "(SELECT * FROM t")
-
-        sql2 = "SELECT * FROM t)"
-        self.assertEqual(remove_outer_parentheses(sql2), "SELECT * FROM t)")
+        cases = {
+            "unmatched opening": "(SELECT * FROM t",
+            "unmatched closing": "SELECT * FROM t)",
+        }
+        for name, sql in cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(remove_outer_parentheses(sql), sql)
 
     def test_not_full_statement(self):
         """Should not remove parentheses if they don't enclose the entire statement."""
