@@ -3,12 +3,11 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
-import tkinter as tk
-from sql_compare import SQLCompareGUI
-
-class TestGUIEmptyState(unittest.TestCase):
     def setUp(self):
-        self.root = tk.Tk()
+        try:
+            self.root = tk.Tk()
+        except tk.TclError:
+            self.skipTest("Skipping GUI tests because Tkinter display is not available")
         self.gui = SQLCompareGUI(self.root)
 
     def tearDown(self):
