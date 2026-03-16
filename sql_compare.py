@@ -117,11 +117,17 @@ class _SQLScanner:
                     self.mode = None
                     self.i += 1
             elif self.mode == 'bracket' and ch == ']':
-                self.mode = None
-                self.i += 1
+                if self.i + 1 < len(self.s) and self.s[self.i + 1] == ']':
+                    self.i += 2
+                else:
+                    self.mode = None
+                    self.i += 1
             elif self.mode == 'backtick' and ch == '`':
-                self.mode = None
-                self.i += 1
+                if self.i + 1 < len(self.s) and self.s[self.i + 1] == '`':
+                    self.i += 2
+                else:
+                    self.mode = None
+                    self.i += 1
             else:
                 self.i += 1
 
