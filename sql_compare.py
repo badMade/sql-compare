@@ -23,6 +23,7 @@ CLI Examples:
 
 import argparse
 import difflib
+import html as html_mod
 import os
 import re
 import itertools
@@ -236,27 +237,28 @@ def split_top_level(s: str, sep: str) -> list:
 
 
 def top_level_find_kw(sql: str, kw: str, start: int = 0):
-    """Find top-level occurrence of keyword kw (word boundary) starting at start."""
-    # Optimization: Use pre-compiled regex with re.finditer to efficiently jump
-    # to candidate keywords in O(N) time, avoiding expensive character-by-character
-    # linear scanning and O(N^2) string slicing.
+    """Find top-level occurrence of keyword kw (word boundary) starting at start.
+
+    Uses re.finditer to jump to candidate positions in O(N) instead of
+    evaluating a regex on sql[i:] at every character (O(N^2)).
+    """
     kw = kw.upper()
-    pattern = re.compile(rf"\b{re.escape(kw)}\b")
-    i = start; mode = None; level = 0
+    pattern = re.compile(rf"\b{re.escape(kw)}\b", re.IGNORECASE)
 
-    for match in pattern.finditer(sql, start):
-        candidate_idx = match.start()
-
-        # Fast-forward the state machine to the candidate match
-        while i < candidate_idx:
+    def _advance_state(sql, frm, to, mode, level):
+        """Advance the quote/paren state machine from index *frm* up to (not including) *to*."""
+        i = frm
+        while i < to:
             ch = sql[i]
             if mode is None:
                 if ch == "'": mode = 'single'
                 elif ch == '"': mode = 'double'
                 elif ch == '[': mode = 'bracket'
                 elif ch == '`': mode = 'backtick'
-                elif ch == '(': level += 1
-                elif ch == ')': level = max(0, level - 1)
+                elif ch == '(':
+                    level += 1
+                elif ch == ')':
+                    level = max(0, level - 1)
             else:
                 if mode == 'single' and ch == "'":
                     if i + 1 < len(sql) and sql[i + 1] == "'": i += 1
@@ -267,24 +269,48 @@ def top_level_find_kw(sql: str, kw: str, start: int = 0):
                 elif mode == 'bracket' and ch == ']': mode = None
                 elif mode == 'backtick' and ch == '`': mode = None
             i += 1
+        return mode, level
 
-        # If the candidate match is at the top-level (not in quotes or parens), return it
+    mode = None; level = 0; prev = start
+    for m in pattern.finditer(sql, pos=start):
+        candidate = m.start()
+        mode, level = _advance_state(sql, prev, candidate, mode, level)
+        prev = m.end()
         if mode is None and level == 0:
-            return candidate_idx
-
+            return candidate
     return -1
 
+
+CLAUSE_SCANNER_RE = re.compile(
+    r"""
+    (
+        '(?:''|[^'])*'            # Single quote (group 1)
+      | "(?:""|[^"])*"            # Double quote (group 1)
+      | \[(?:[^\]]*)\]            # Bracket (group 1)
+      | `(?:[^`]*)`               # Backtick (group 1)
+    )
+    | (\()                        # Open paren (group 2)
+    | (\))                        # Close paren (group 3)
+    | \b(WHERE|GROUP\s+BY|HAVING|ORDER\s+BY|LIMIT|OFFSET|QUALIFY|WINDOW|UNION|INTERSECT|EXCEPT)\b # Keywords (group 4)
+    """,
+    re.VERBOSE | re.IGNORECASE
+)
 
 def clause_end_index(sql: str, start: int) -> int:
     """
     Find end index for a clause (FROM or WHERE) to the next top-level major keyword.
+    Uses regex scanning for performance instead of multiple linear searches.
     """
-    terms = CLAUSE_TERMINATORS
-    ends = []
-    for term in SQL_CLAUSE_TERMINATORS:
-        idx = top_level_find_kw(sql, term, start)
-        if idx != -1: ends.append(idx)
-    return min(ends) if ends else len(sql)
+    level = 0
+    for match in CLAUSE_SCANNER_RE.finditer(sql, pos=start):
+        if match.group(2): # (
+            level += 1
+        elif match.group(3): # )
+            level = max(0, level - 1)
+        elif match.group(4): # Keyword
+            if level == 0:
+                return match.start()
+    return len(sql)
 
 
 # =============================
@@ -342,18 +368,11 @@ def canonicalize_where_and(sql: str) -> str:
     return collapse_whitespace(s)
 
 
-def _parse_from_clause_body(body: str):
-    """
-    Parse FROM body into base and join segments.
-    Returns: (base_text, segments)
-    segment = dict(type='INNER'|'LEFT'|'RIGHT'|'FULL'|'CROSS'|'NATURAL'|...,
-                   table='...',
-                   cond_kw='ON'|'USING'|None,
-                   cond='...' or '')
-    Heuristic, top-level only.
-    """
-    i = 0; n = len(body)
-    mode = None; level = 0
+def _tokenize_from_clause_body(body: str) -> list:
+    i = 0
+    n = len(body)
+    mode = None
+    level = 0
     tokens = []
     buf = []
     def flush_buf():
@@ -395,18 +414,39 @@ def _parse_from_clause_body(body: str):
                 else: mode = None
             elif mode == 'bracket' and ch == ']': mode = None
             elif mode == 'backtick' and ch == '`': mode = None
-        buf.append(ch); i += 1
+            elif mode == 'backtick' and ch == '`': mode = None
+        buf.append(ch)
+        i += 1
     flush_buf()
+    return tokens
 
+
+def _extract_base_table(tokens: list) -> tuple:
     base = ""
-    segments = []
     idx = 0
     while idx < len(tokens) and tokens[idx][0] != "JOINKW":
         kind, text = tokens[idx]
         if kind == "TEXT":
             base = (base + " " + text).strip()
         idx += 1
+    return base, idx
 
+
+def _clean_join_type(join_kw: str) -> str:
+    seg_type = join_kw.replace(" OUTER", "").upper()
+    if seg_type.endswith(" JOIN"):
+        seg_type = seg_type[:-5]
+    elif seg_type == "JOIN":
+        seg_type = ""
+    seg_type = seg_type.strip()
+    if seg_type == "":
+        seg_type = "INNER"
+    return seg_type
+
+
+def _extract_join_segments(tokens: list, start_idx: int) -> list:
+    segments = []
+    idx = start_idx
     while idx < len(tokens):
         if tokens[idx][0] != "JOINKW":
             idx += 1; continue
@@ -432,24 +472,29 @@ def _parse_from_clause_body(body: str):
                     cond_text = (cond_text + " " + t).strip()
                 idx += 1
 
-        seg_type = join_kw.replace(" OUTER", "")
-        seg_type = seg_type.upper()
-        if seg_type.endswith(" JOIN"):
-            seg_type = seg_type[:-5]
-        elif seg_type == "JOIN":
-            seg_type = ""
-        seg_type = seg_type.strip()
-        if seg_type == "":
-            seg_type = "INNER"
-            seg_type = "INNER"
         segments.append({
-            "type": seg_type,
+            "type": _clean_join_type(join_kw),
             "table": collapse_whitespace(table_text),
             "cond_kw": cond_kw,
             "cond": collapse_whitespace(cond_text),
         })
-    base = collapse_whitespace(base)
-    return base, segments
+    return segments
+
+
+def _parse_from_clause_body(body: str) -> tuple:
+    """
+    Parse FROM body into base and join segments.
+    Returns: (base_text, segments)
+    segment = dict(type='INNER'|'LEFT'|'RIGHT'|'FULL'|'CROSS'|'NATURAL'|...,
+                   table='...',
+                   cond_kw='ON'|'USING'|None,
+                   cond='...' or '')
+    Heuristic, top-level only.
+    """
+    tokens = _tokenize_from_clause_body(body)
+    base, idx = _extract_base_table(tokens)
+    segments = _extract_join_segments(tokens, idx)
+    return collapse_whitespace(base), segments
 
 
 def _rebuild_from_body(base: str, segments: list) -> str:
@@ -797,8 +842,11 @@ def generate_report(result: dict, mode: str, fmt: str, out_path: str, ignore_ws:
     # HTML (color-coded)
     hd = difflib.HtmlDiff(wrapcolumn=120)
     def mk(title, a, b, fromname, toname):
-        table = hd.make_table(a.splitlines(), b.splitlines(), fromdesc=fromname, todesc=toname, context=True, numlines=3)
-        return f"<h2>{title}</h2>\n{table}"
+        table = hd.make_table(a.splitlines(), b.splitlines(),
+                              fromdesc=html_mod.escape(fromname),
+                              todesc=html_mod.escape(toname),
+                              context=True, numlines=3)
+        return f"<h2>{html_mod.escape(title)}</h2>\n{table}"
 
     sections = []
     sections.append("<h1>SQL Compare Report</h1>")
@@ -812,7 +860,7 @@ def generate_report(result: dict, mode: str, fmt: str, out_path: str, ignore_ws:
     sections.append("""
     <h2>Summary of differences</h2>
     <ul>
-    """ + "\n".join(f"<li>{line}</li>" for line in result["summary"]) + "</ul>")
+    """ + "\n".join(f"<li>{html_mod.escape(line)}</li>" for line in result["summary"]) + "</ul>")
 
     sections.append("""
     <div style="margin:8px 0;">
@@ -830,7 +878,7 @@ def generate_report(result: dict, mode: str, fmt: str, out_path: str, ignore_ws:
     if mode in ("both", "canonical"):
         sections.append(mk("Canonicalized Diff", result["can_a"], result["can_b"], "sql1(canon)", "sql2(canon)"))
 
-    html = f"""<!DOCTYPE html>
+    html_out = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>SQL Compare Report</title>
 <style>
 body {{ font-family: Segoe UI, Tahoma, Arial, sans-serif; margin: 16px; color: #111; }}
@@ -848,7 +896,7 @@ table.diff thead th {{ background: #f6f8fa; }}
 </head><body>
 {''.join(sections)}
 </body></html>"""
-    Path(out_path).write_text(html, encoding="utf-8")
+    Path(out_path).write_text(html_out, encoding="utf-8")
 
 
 # =============================
@@ -919,9 +967,15 @@ class SQLCompareGUI:
         frm_btns = ttk.Frame(self.root)
         frm_btns.pack(fill="x", **pad)
         ttk.Button(frm_btns, text="Compare", command=self.do_compare).pack(side="left")
-        ttk.Button(frm_btns, text="Copy Output", command=self.copy_output).pack(side="left", padx=6)
-        ttk.Button(frm_btns, text="Clear", command=self.clear_output).pack(side="left", padx=6)
-        ttk.Button(frm_btns, text="Save Report…", command=self.save_report).pack(side="left", padx=6)
+        self.btn_copy = ttk.Button(frm_btns, text="Copy Output", command=self.copy_output)
+        self.btn_copy.pack(side="left", padx=6)
+        self.btn_copy.state(['disabled'])
+        self.btn_clear = ttk.Button(frm_btns, text="Clear", command=self.clear_output)
+        self.btn_clear.pack(side="left", padx=6)
+        self.btn_clear.state(['disabled'])
+        self.btn_save = ttk.Button(frm_btns, text="Save Report…", command=self.save_report)
+        self.btn_save.pack(side="left", padx=6)
+        self.btn_save.state(['disabled'])
 
     def _create_output_frame(self, pad):
         frm_out = ttk.Frame(self.root)
@@ -934,6 +988,9 @@ class SQLCompareGUI:
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
+        self.txt.tag_configure("empty", foreground="gray", justify="center")
+        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
+
     def _toggle_join_options(self):
         # Enable/disable dependent flags based on global join toggle
         if self.enable_join.get():
@@ -955,6 +1012,11 @@ class SQLCompareGUI:
 
     def clear_output(self):
         self.txt.delete("1.0", "end")
+        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
+        self.btn_copy.state(['disabled'])
+        self.btn_clear.state(['disabled'])
+        self.btn_save.state(['disabled'])
+        self.last_result = None
 
     def copy_output(self):
         try:
@@ -986,7 +1048,10 @@ class SQLCompareGUI:
             messagebox.showerror("Error", str(e))
 
     def render_result(self, result: dict, mode: str, ignore_ws: bool):
-        self.clear_output()
+        self.txt.delete("1.0", "end")
+        self.btn_copy.state(['!disabled'])
+        self.btn_clear.state(['!disabled'])
+        self.btn_save.state(['!disabled'])
         lines = []
         lines.append("=== SQL Compare ===")
         lines.append(f"Whitespace-only equal: {'YES' if result['ws_equal'] else 'NO'}")

@@ -1,4 +1,4 @@
-# CLAUDE.md — Project Guide for Claude Code
+# Gemini Code Assist — Project Style Guide
 
 ## Project Overview
 
@@ -28,7 +28,7 @@ python sql_compare.py
 
 ## How to Verify Changes
 
-There is no formal test suite. Verify changes by running:
+There is a small unit test suite under `tests/` (for example, `tests/test_sql_compare.py`). Verify changes by first running the unit tests, then the CLI smoke tests:
 
 ```bash
 # Quick smoke test — should exit 0 (queries are canonically equivalent)
@@ -54,6 +54,7 @@ python sql_compare.py --strings "SELECT 1" "SELECT 1" --mode exact
 - Python with type hints on function signatures.
 - Single-file architecture — all code lives in `sql_compare.py`.
 - Use standard library only — do not add third-party dependencies.
+- Python >= 3.8 — do not use syntax or stdlib features added after 3.8 (e.g., `match` statements, `str.removeprefix`, `tomllib`).
 
 ## Code Commandment: TDD-First
 

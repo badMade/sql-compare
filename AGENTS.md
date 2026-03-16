@@ -1,4 +1,10 @@
-# CLAUDE.md — Project Guide for Claude Code
+<!--
+NOTE: This file contains duplicated project context. When making changes here,
+please ensure they are propagated to the following files:
+- CLAUDE.md
+- LLM-INSTRUCTIONS.md
+-->
+# AGENTS.md — Project Guide for OpenAI Codex
 
 ## Project Overview
 
@@ -28,9 +34,11 @@ python sql_compare.py
 
 ## How to Verify Changes
 
-There is no formal test suite. Verify changes by running:
+There is a small unit test suite under `tests/` (for example, `tests/test_sql_compare.py`). Verify changes by first running the unit tests, then the CLI smoke tests:
 
 ```bash
+# Run unit tests
+python -m unittest discover -s tests
 # Quick smoke test — should exit 0 (queries are canonically equivalent)
 python sql_compare.py examples/A.sql examples/B.sql --mode canonical
 
@@ -54,6 +62,7 @@ python sql_compare.py --strings "SELECT 1" "SELECT 1" --mode exact
 - Python with type hints on function signatures.
 - Single-file architecture — all code lives in `sql_compare.py`.
 - Use standard library only — do not add third-party dependencies.
+- Python >= 3.8 — do not use syntax or stdlib features added after 3.8 (e.g., `match` statements, `str.removeprefix`, `tomllib`).
 
 ## Code Commandment: TDD-First
 
