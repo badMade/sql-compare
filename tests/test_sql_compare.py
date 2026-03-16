@@ -2,7 +2,7 @@ import unittest
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw,
+    top_level_find_kw, remove_outer_parentheses
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -408,61 +408,48 @@ class TestSecurity(unittest.TestCase):
             os.unlink(tmp_path)
 
 
+
+
 class TestRemoveOuterParentheses(unittest.TestCase):
     def test_basic_single_layer(self):
         """Should remove a single layer of outer parentheses."""
-        from sql_compare import remove_outer_parentheses
         sql = "(SELECT * FROM t)"
         self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
 
     def test_multiple_layers(self):
         """Should remove multiple layers of outer parentheses."""
-        from sql_compare import remove_outer_parentheses
         sql = "(((SELECT * FROM t)))"
         self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
 
     def test_no_parentheses(self):
         """Should return the string unmodified if no outer parentheses exist."""
-        from sql_compare import remove_outer_parentheses
         sql = "SELECT * FROM t"
         self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
 
     def test_unmatched_parentheses(self):
         """Should return the string unmodified if parentheses are not matched at the ends."""
-        from sql_compare import remove_outer_parentheses
-        cases = {
-            "unmatched opening": "(SELECT * FROM t",
-            "unmatched closing": "SELECT * FROM t)",
-        }
-        for name, sql in cases.items():
-            with self.subTest(name=name):
-                self.assertEqual(remove_outer_parentheses(sql), sql)
+        sql = "(SELECT * FROM t"
+        self.assertEqual(remove_outer_parentheses(sql), "(SELECT * FROM t")
+
+        sql2 = "SELECT * FROM t)"
+        self.assertEqual(remove_outer_parentheses(sql2), "SELECT * FROM t)")
 
     def test_not_full_statement(self):
         """Should not remove parentheses if they don't enclose the entire statement."""
-        from sql_compare import remove_outer_parentheses
         sql = "(SELECT a) UNION (SELECT b)"
         self.assertEqual(remove_outer_parentheses(sql), "(SELECT a) UNION (SELECT b)")
 
     def test_parentheses_inside_strings(self):
         """Should not be confused by parentheses inside quoted strings."""
-        from sql_compare import remove_outer_parentheses
-        # The string starts with ( and ends with ), and the outer parentheses fully wrap the statement;
-        # inner parentheses appear only inside the quoted string and must be ignored structurally.
+        # The string starts with ( and ends with ), but the parentheses do not match each other structurally at the top level
         sql = "('()')"
         self.assertEqual(remove_outer_parentheses(sql), "'()'")
 
     def test_empty_string(self):
         """Should handle empty strings and whitespace correctly."""
-        from sql_compare import remove_outer_parentheses
-        cases = {
-            "empty string": ("", ""),
-            "empty parentheses": ("()", ""),
-            "empty parentheses with whitespace": (" ( ) ", ""),
-        }
-        for name, (sql, expected) in cases.items():
-            with self.subTest(name=name):
-                self.assertEqual(remove_outer_parentheses(sql), expected)
+        self.assertEqual(remove_outer_parentheses(""), "")
+        self.assertEqual(remove_outer_parentheses("()"), "")
+        self.assertEqual(remove_outer_parentheses(" ( ) "), "")
 
 if __name__ == '__main__':
     unittest.main()
