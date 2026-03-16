@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - claude/remove-redundant-prs-*
+  workflow_dispatch:
 
 jobs:
   close-redundant-prs:
