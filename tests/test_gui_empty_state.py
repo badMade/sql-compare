@@ -1,5 +1,6 @@
 import sys
 import os
+import tkinter as tk
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
@@ -13,6 +14,8 @@ except ImportError:
     pass
 
 @unittest.skipUnless(TK_AVAILABLE, "Tkinter not available")
+from sql_compare import SQLCompareGUI
+
 class TestGUIEmptyState(unittest.TestCase):
     def setUp(self):
         try:
@@ -25,6 +28,10 @@ class TestGUIEmptyState(unittest.TestCase):
     def tearDown(self):
         if hasattr(self, 'root'):
             self.root.destroy()
+        try:
+            self.root.destroy()
+        except (tk.TclError, AttributeError):
+            pass
 
     def test_initial_empty_state(self):
         # Assert tag exists and has correct config
