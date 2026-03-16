@@ -1,8 +1,10 @@
 import unittest
+import argparse
+from unittest.mock import patch
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw,
+    top_level_find_kw, load_inputs,
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -267,6 +269,7 @@ class TestStripSqlComments(unittest.TestCase):
         sql = "SELECT /**/ * FROM my_table;"
         expected = "SELECT  * FROM my_table;"
         self.assertEqual(strip_sql_comments(sql), expected)
+
     def test_comment_like_sequences_in_strings(self):
         """Ensures comment-like sequences in string literals are not stripped."""
         with self.subTest("Line comment in string"):
@@ -406,6 +409,56 @@ class TestSecurity(unittest.TestCase):
             self.assertIn('&lt;script&gt;', html_content)
         finally:
             os.unlink(tmp_path)
+
+
+class TestLoadInputs(unittest.TestCase):
+    def test_strings_input(self):
+        """Should load inputs from args.strings if provided."""
+        args = argparse.Namespace(strings=["SELECT 1", "SELECT 2"], stdin=False, files=[])
+        a, b, mode = load_inputs(args)
+        self.assertEqual(a, "SELECT 1")
+        self.assertEqual(b, "SELECT 2")
+        self.assertEqual(mode, "strings")
+
+    @patch('sql_compare.read_from_stdin_two_parts')
+    def test_stdin_input(self, mock_read_stdin):
+        """Should load inputs from stdin if args.stdin is true."""
+        mock_read_stdin.return_value = ("SELECT 3", "SELECT 4")
+        args = argparse.Namespace(strings=[], stdin=True, files=[])
+        a, b, mode = load_inputs(args)
+        self.assertEqual(a, "SELECT 3")
+        self.assertEqual(b, "SELECT 4")
+        self.assertEqual(mode, "stdin")
+        mock_read_stdin.assert_called_once()
+
+    @patch('sql_compare.safe_read_file')
+    def test_files_input(self, mock_safe_read):
+        """Should load inputs from files if args.files has exactly two items."""
+        mock_safe_read.side_effect = ["SELECT 5", "SELECT 6"]
+        args = argparse.Namespace(strings=[], stdin=False, files=["file1.sql", "file2.sql"])
+        a, b, mode = load_inputs(args)
+        self.assertEqual(a, "SELECT 5")
+        self.assertEqual(b, "SELECT 6")
+        self.assertEqual(mode, "files")
+        self.assertEqual(mock_safe_read.call_count, 2)
+        mock_safe_read.assert_any_call("file1.sql")
+        mock_safe_read.assert_any_call("file2.sql")
+
+    def test_no_inputs(self):
+        """Should return None if no valid inputs are provided."""
+        args = argparse.Namespace(strings=[], stdin=False, files=[])
+        a, b, mode = load_inputs(args)
+        self.assertEqual(a, None)
+        self.assertEqual(b, None)
+        self.assertEqual(mode, None)
+
+    def test_files_invalid_length(self):
+        """Should return None if args.files is provided but does not have exactly two items."""
+        args = argparse.Namespace(strings=[], stdin=False, files=["file1.sql"])
+        a, b, mode = load_inputs(args)
+        self.assertEqual(a, None)
+        self.assertEqual(b, None)
+        self.assertEqual(mode, None)
 
 
 if __name__ == '__main__':
