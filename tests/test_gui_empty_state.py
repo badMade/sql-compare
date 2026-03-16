@@ -1,8 +1,12 @@
 import sys
 import os
+import tkinter as tk
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import unittest
+from sql_compare import SQLCompareGUI
+
+class TestGUIEmptyState(unittest.TestCase):
     def setUp(self):
         try:
             self.root = tk.Tk()
@@ -11,7 +15,10 @@ import unittest
         self.gui = SQLCompareGUI(self.root)
 
     def tearDown(self):
-        self.root.destroy()
+        try:
+            self.root.destroy()
+        except (tk.TclError, AttributeError):
+            pass
 
     def test_initial_empty_state(self):
         # Assert tag exists and has correct config
