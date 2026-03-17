@@ -2,7 +2,7 @@ import unittest
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw,
+    top_level_find_kw, split_top_level,
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -410,3 +410,43 @@ class TestSecurity(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class TestSplitTopLevel(unittest.TestCase):
+    def test_basic_split(self):
+        self.assertEqual(split_top_level("A, B, C", ","), ["A", "B", "C"])
+        self.assertEqual(split_top_level("A AND B AND C", " AND "), ["A", "B", "C"])
+
+    def test_ignore_inside_quotes(self):
+        self.assertEqual(split_top_level("'A, B', C", ","), ["'A, B'", "C"])
+        self.assertEqual(split_top_level('"A, B", C', ","), ['"A, B"', "C"])
+        self.assertEqual(split_top_level("A = 'test AND case' AND B = 1", " AND "), ["A = 'test AND case'", "B = 1"])
+
+    def test_ignore_inside_brackets_backticks(self):
+        self.assertEqual(split_top_level("[A, B], C", ","), ["[A, B]", "C"])
+        self.assertEqual(split_top_level("`A, B`, C", ","), ["`A, B`", "C"])
+
+    def test_ignore_inside_parentheses(self):
+        self.assertEqual(split_top_level("A(1, 2), B", ","), ["A(1, 2)", "B"])
+        self.assertEqual(split_top_level("(A AND B) AND C", " AND "), ["(A AND B)", "C"])
+
+    def test_empty_and_separator_only(self):
+        self.assertEqual(split_top_level("", ","), [])
+        self.assertEqual(split_top_level(",", ","), [])
+        self.assertEqual(split_top_level("   ", ","), [])
+
+    def test_consecutive_separators(self):
+        self.assertEqual(split_top_level("A,,B", ","), ["A", "B"])
+        self.assertEqual(split_top_level("A AND  AND B", " AND "), ["A", "B"])
+
+    def test_unbalanced_modes(self):
+        # Since the loop ends when the string ends, whatever is in the buffer gets appended
+        self.assertEqual(split_top_level("A, [B, C", ","), ["A", "[B, C"])
+        self.assertEqual(split_top_level("A, (B, C", ","), ["A", "(B, C"])
+        self.assertEqual(split_top_level("A, 'B, C", ","), ["A", "'B, C"])
+
+    def test_ignore_case(self):
+        # We simulate the calling side passing `sep` correctly case-insensitively, or we test that it only splits exactly case-sensitively based on the current implementation.
+        # The current implementation uses `s.startswith(sep, i)`, which is case-sensitive.
+        # So we should verify case-sensitive behavior here.
+        self.assertEqual(split_top_level("A and B AND C", " AND "), ["A and B", "C"])
+        self.assertEqual(split_top_level("A AND B AND C", " AND "), ["A", "B", "C"])
