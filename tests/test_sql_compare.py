@@ -2,7 +2,7 @@ import unittest
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw,
+    top_level_find_kw, build_difference_summary,
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -406,7 +406,104 @@ class TestSecurity(unittest.TestCase):
             self.assertIn('&lt;script&gt;', html_content)
         finally:
             os.unlink(tmp_path)
+class TestBuildDifferenceSummary(unittest.TestCase):
 
+
+    def test_build_difference_summary(self):
+        """Test difference summary generation logic including SELECT, WHERE, and JOIN."""
+        cases = [
+            (
+                "No structural differences",
+                "SELECT a FROM t",
+                "SELECT a FROM t",
+                True, # enable_join_reorder
+                ["No structural differences detected beyond normalization."]
+            ),
+            (
+                "SELECT list differs: missing",
+                "SELECT a, b FROM t",
+                "SELECT a FROM t",
+                True,
+                ["SELECT list differs: items only in SQL1: 1", "Token-level changes: +0 inserts, -2 deletes, ~0 replaces."]
+            ),
+            (
+                "SELECT list differs: added",
+                "SELECT a FROM t",
+                "SELECT a, b FROM t",
+                True,
+                ["SELECT list differs: items only in SQL2: 1", "Token-level changes: +2 inserts, -0 deletes, ~0 replaces."]
+            ),
+            (
+                "SELECT list order differs",
+                "SELECT a, b FROM t",
+                "SELECT b, a FROM t",
+                True,
+                ["SELECT list order differs (same items, different order).", "Token-level changes: +2 inserts, -2 deletes, ~0 replaces."]
+            ),
+            (
+                "WHERE AND terms differ: missing",
+                "SELECT a FROM t WHERE x = 1 AND y = 2",
+                "SELECT a FROM t WHERE x = 1",
+                True,
+                ["WHERE AND terms differ: terms only in SQL1: 1", "Token-level changes: +0 inserts, -4 deletes, ~0 replaces."]
+            ),
+            (
+                "WHERE AND terms differ: added",
+                "SELECT a FROM t WHERE x = 1",
+                "SELECT a FROM t WHERE x = 1 AND y = 2",
+                True,
+                ["WHERE AND terms differ: terms only in SQL2: 1", "Token-level changes: +4 inserts, -0 deletes, ~0 replaces."]
+            ),
+            (
+                "WHERE AND term order differs",
+                "SELECT a FROM t WHERE x = 1 AND y = 2",
+                "SELECT a FROM t WHERE y = 2 AND x = 1",
+                True,
+                ["WHERE AND term order differs (same terms, different order).", "Token-level changes: +4 inserts, -4 deletes, ~0 replaces."]
+            ),
+            (
+                "Reorderable JOIN components differ",
+                "SELECT a FROM t JOIN t2 ON t.id = t2.id",
+                "SELECT a FROM t",
+                True,
+                ["Reorderable JOIN components differ: 1 only in SQL1.", "Token-level changes: +0 inserts, -10 deletes, ~0 replaces."]
+            ),
+            (
+                "Reorderable JOIN components differ (SQL2)",
+                "SELECT a FROM t",
+                "SELECT a FROM t JOIN t2 ON t.id = t2.id",
+                True,
+                ["Reorderable JOIN components differ: 1 only in SQL2.", "Token-level changes: +10 inserts, -0 deletes, ~0 replaces."]
+            ),
+            (
+                "Reorderable JOIN segment order differs",
+                "SELECT a FROM t JOIN t2 ON t.id = t2.id JOIN t3 ON t.id = t3.id",
+                "SELECT a FROM t JOIN t3 ON t.id = t3.id JOIN t2 ON t.id = t2.id",
+                True,
+                ["Reorderable JOIN segment order differs (same components, different order).", "Token-level changes: +10 inserts, -10 deletes, ~0 replaces."]
+            ),
+            (
+                "Join reordering disabled",
+                "SELECT a FROM t JOIN t2 ON t.id = t2.id",
+                "SELECT a FROM t JOIN t3 ON t.id = t3.id",
+                False,
+                ["Join reordering is disabled; join order is considered significant in comparisons.", "Token-level changes: +0 inserts, -0 deletes, ~2 replaces."]
+            )
+        ]
+
+        for desc, norm_a, norm_b, enable_join_reorder, expected_summary in cases:
+            with self.subTest(desc=desc):
+                tokens_a = tokenize(norm_a)
+                tokens_b = tokenize(norm_b)
+
+                summary = build_difference_summary(
+                    norm_a=norm_a, norm_b=norm_b,
+                    can_a="", can_b="",
+                    tokens_a=tokens_a, tokens_b=tokens_b,
+                    enable_join_reorder=enable_join_reorder,
+                    allow_full_outer=False, allow_left=False
+                )
+                self.assertEqual(summary, expected_summary)
 
 if __name__ == '__main__':
     unittest.main()
