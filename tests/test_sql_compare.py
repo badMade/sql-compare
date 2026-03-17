@@ -2,7 +2,7 @@ import unittest
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw,
+    top_level_find_kw, remove_outer_parentheses
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -422,6 +422,66 @@ class TestTokenizeFromClauseBody(unittest.TestCase):
             ('CONDKW', 'ON'),
             ('TEXT', 't1.`id` = t2.`id`')
         ])
+class TestCollapseWhitespace(unittest.TestCase):
+    def test_collapse_whitespace_scenarios(self):
+        """Test various scenarios for whitespace collapsing."""
+        test_cases = {
+            "basic_collapse": ("SELECT  *   FROM    t1", "SELECT * FROM t1"),
+            "mixed_whitespace_sql": ("SELECT\t*\nFROM\r\nt1", "SELECT * FROM t1"),
+            "mixed_whitespace_simple": ("A \t \n B", "A B"),
+            "trimming_spaces": ("   SELECT * FROM t1  ", "SELECT * FROM t1"),
+            "trimming_mixed": ("\n\tSELECT * FROM t1\r\n", "SELECT * FROM t1"),
+            "no_whitespace_sql": ("SELECT*FROM(t1)", "SELECT*FROM(t1)"),
+            "no_whitespace_word": ("word", "word"),
+            "empty_string": ("", ""),
+            "only_whitespace": ("   \t\n  ", ""),
+        }
+
+        for name, (input_str, expected) in test_cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(collapse_whitespace(input_str), expected)
+
+
+class TestRemoveOuterParentheses(unittest.TestCase):
+    def test_basic_single_layer(self):
+        """Should remove a single layer of outer parentheses."""
+        sql = "(SELECT * FROM t)"
+        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
+
+    def test_multiple_layers(self):
+        """Should remove multiple layers of outer parentheses."""
+        sql = "(((SELECT * FROM t)))"
+        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
+
+    def test_no_parentheses(self):
+        """Should return the string unmodified if no outer parentheses exist."""
+        sql = "SELECT * FROM t"
+        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
+
+    def test_unmatched_parentheses(self):
+        """Should return the string unmodified if parentheses are not matched at the ends."""
+        sql = "(SELECT * FROM t"
+        self.assertEqual(remove_outer_parentheses(sql), "(SELECT * FROM t")
+
+        sql2 = "SELECT * FROM t)"
+        self.assertEqual(remove_outer_parentheses(sql2), "SELECT * FROM t)")
+
+    def test_not_full_statement(self):
+        """Should not remove parentheses if they don't enclose the entire statement."""
+        sql = "(SELECT a) UNION (SELECT b)"
+        self.assertEqual(remove_outer_parentheses(sql), "(SELECT a) UNION (SELECT b)")
+
+    def test_parentheses_inside_strings(self):
+        """Should not be confused by parentheses inside quoted strings."""
+        # The string starts with ( and ends with ), but the parentheses do not match each other structurally at the top level
+        sql = "('()')"
+        self.assertEqual(remove_outer_parentheses(sql), "'()'")
+
+    def test_empty_string(self):
+        """Should handle empty strings and whitespace correctly."""
+        self.assertEqual(remove_outer_parentheses(""), "")
+        self.assertEqual(remove_outer_parentheses("()"), "")
+        self.assertEqual(remove_outer_parentheses(" ( ) "), "")
 
 if __name__ == '__main__':
     unittest.main()
