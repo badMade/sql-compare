@@ -2,7 +2,7 @@ import unittest
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw, remove_outer_parentheses
+    top_level_find_kw,
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
