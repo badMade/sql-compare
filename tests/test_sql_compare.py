@@ -410,3 +410,17 @@ class TestSecurity(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class TestTokenizeFromClauseBody(unittest.TestCase):
+    def test_backticks(self):
+        """Should correctly parse backticks in a FROM clause body."""
+        from sql_compare import _tokenize_from_clause_body
+        sql = "t1 JOIN t2 ON t1.`id` = t2.`id`"
+        tokens = _tokenize_from_clause_body(sql)
+        self.assertEqual(tokens, [
+            ('TEXT', 't1'),
+            ('JOINKW', 'JOIN'),
+            ('TEXT', 't2'),
+            ('CONDKW', 'ON'),
+            ('TEXT', 't1.`id` = t2.`id`')
+        ])
