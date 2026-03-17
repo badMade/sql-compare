@@ -21,9 +21,14 @@ class TestSQLCompareGUI(unittest.TestCase):
 
     def test_initial_button_states_are_disabled(self):
         """Test that the action buttons are disabled when the app starts."""
-        self.assertIn('disabled', self.app.btn_copy.state())
-        self.assertIn('disabled', self.app.btn_clear.state())
-        self.assertIn('disabled', self.app.btn_save.state())
+        buttons = {
+            "copy": self.app.btn_copy,
+            "clear": self.app.btn_clear,
+            "save": self.app.btn_save,
+        }
+        for name, btn in buttons.items():
+            with self.subTest(button=name):
+                self.assertIn('disabled', btn.state())
 
     def test_initial_output_placeholder_text(self):
         """Test that the output text area contains the empty state placeholder on startup."""
