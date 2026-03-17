@@ -408,6 +408,24 @@ class TestSecurity(unittest.TestCase):
             os.unlink(tmp_path)
 
 
+class TestCollapseWhitespace(unittest.TestCase):
+    def test_collapse_whitespace_scenarios(self):
+        """Test various scenarios for whitespace collapsing."""
+        test_cases = {
+            "basic_collapse": ("SELECT  *   FROM    t1", "SELECT * FROM t1"),
+            "mixed_whitespace_sql": ("SELECT\t*\nFROM\r\nt1", "SELECT * FROM t1"),
+            "mixed_whitespace_simple": ("A \t \n B", "A B"),
+            "trimming_spaces": ("   SELECT * FROM t1  ", "SELECT * FROM t1"),
+            "trimming_mixed": ("\n\tSELECT * FROM t1\r\n", "SELECT * FROM t1"),
+            "no_whitespace_sql": ("SELECT*FROM(t1)", "SELECT*FROM(t1)"),
+            "no_whitespace_word": ("word", "word"),
+            "empty_string": ("", ""),
+            "only_whitespace": ("   \t\n  ", ""),
+        }
+
+        for name, (input_str, expected) in test_cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(collapse_whitespace(input_str), expected)
 
 
 class TestRemoveOuterParentheses(unittest.TestCase):
