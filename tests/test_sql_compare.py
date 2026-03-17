@@ -18,6 +18,7 @@ class TestCollapseWhitespace(unittest.TestCase):
             ("Mixed whitespace characters", "SELECT\t\ta\nFROM \r\nb", "SELECT a FROM b"),
             ("Leading and trailing whitespace", "  SELECT a FROM b  ", "SELECT a FROM b"),
             ("Multiple consecutive spaces", "SELECT    a    FROM     b", "SELECT a FROM b"),
+            ("Unicode whitespace", "SELECT\u00A0a\u2003FROM\u2009b", "SELECT a FROM b"),
         ]
 
         for description, input_str, expected in test_cases:
