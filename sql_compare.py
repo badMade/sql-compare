@@ -992,6 +992,8 @@ class SQLCompareGUI:
         def _readonly_handler(event):
             if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Prior', 'Next', 'Home', 'End'):
                 return None
+            if event.keysym.lower() in ('c', 'a') and (event.state & 4 or event.state & 8):
+                return None
             return "break"
 
         self.txt.bind("<Key>", _readonly_handler)
