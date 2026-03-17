@@ -384,6 +384,22 @@ class TestTopLevelFindKw(unittest.TestCase):
 
 
 class TestSecurity(unittest.TestCase):
+    def test_unbounded_stdin_dos(self):
+        """Verify that read_from_stdin_two_parts limits read size to prevent DoS."""
+        import sys
+        from unittest.mock import patch
+        from sql_compare import read_from_stdin_two_parts, MAX_FILE_SIZE_BYTES
+
+        class MockStdin:
+            def read(self, size=-1):
+                if size == -1:
+                    raise Exception("Unbounded read called!")
+                return "a" * size
+
+        with patch("sys.stdin", MockStdin()):
+            with self.assertRaisesRegex(ValueError, "Input too large: stdin exceeds"):
+                read_from_stdin_two_parts()
+
     def test_xss_in_html_report_summary(self):
         """Verify that XSS payloads in summary lines are escaped in HTML output."""
         import tempfile, os
