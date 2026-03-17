@@ -134,8 +134,10 @@ def uppercase_outside_quotes(s: str) -> str:
 
 
 def remove_trailing_semicolon(s: str) -> str:
+    if s is None:
+        return None
     s = s.strip()
-    return s[:-1] if s.endswith(";") else s
+    return s[:-1].strip() if s.endswith(";") else s
 
 
 def remove_outer_parentheses(s: str) -> str:

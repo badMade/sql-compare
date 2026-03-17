@@ -2,7 +2,7 @@ import unittest
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw,
+    top_level_find_kw, remove_trailing_semicolon,
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -407,6 +407,26 @@ class TestSecurity(unittest.TestCase):
         finally:
             os.unlink(tmp_path)
 
+
+
+class TestRemoveTrailingSemicolon(unittest.TestCase):
+    def test_remove_trailing_semicolon(self):
+        """Tests various edge cases for removing a single trailing semicolon."""
+        test_cases = [
+            ('SELECT 1', 'SELECT 1'),
+            ('SELECT 1;', 'SELECT 1'),
+            ('SELECT 1;;', 'SELECT 1;'),
+            ('SELECT 1;  ', 'SELECT 1'),
+            ('SELECT 1; ; ', 'SELECT 1;'),
+            ('SELECT 1; -- comment', 'SELECT 1; -- comment'),
+            ('', ''),
+            (';', ''),
+            (';;', ';'),
+            (None, None),
+        ]
+        for input_sql, expected in test_cases:
+            with self.subTest(input_sql=input_sql):
+                self.assertEqual(remove_trailing_semicolon(input_sql), expected)
 
 if __name__ == '__main__':
     unittest.main()
