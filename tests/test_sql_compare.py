@@ -2,8 +2,29 @@ import unittest
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw,
+    top_level_find_kw, collapse_whitespace,
 )
+
+
+class TestCollapseWhitespace(unittest.TestCase):
+    def test_collapse_whitespace_edge_cases(self):
+        """Test edge cases for collapse_whitespace function."""
+        test_cases = [
+            # description, input_string, expected_output
+            ("Empty string", "", ""),
+            ("String with only spaces", "     ", ""),
+            ("String with only newlines and tabs", "\n\n\t\t\n", ""),
+            ("Already collapsed string", "SELECT a FROM b", "SELECT a FROM b"),
+            ("Mixed whitespace characters", "SELECT\t\ta\nFROM \r\nb", "SELECT a FROM b"),
+            ("Leading and trailing whitespace", "  SELECT a FROM b  ", "SELECT a FROM b"),
+            ("Multiple consecutive spaces", "SELECT    a    FROM     b", "SELECT a FROM b"),
+            ("Unicode whitespace", "SELECT\u00A0a\u2003FROM\u2009b", "SELECT a FROM b"),
+        ]
+
+        for description, input_str, expected in test_cases:
+            with self.subTest(description=description, input=input_str):
+                self.assertEqual(collapse_whitespace(input_str), expected)
+
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
