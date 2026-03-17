@@ -268,8 +268,8 @@ class TestStripSqlComments(unittest.TestCase):
         sql = "SELECT /**/ * FROM my_table;"
         expected = "SELECT  * FROM my_table;"
         self.assertEqual(strip_sql_comments(sql), expected)
-    def test_comment_like_sequences_in_strings(self):
-        """Ensures comment-like sequences in string literals are not stripped."""
+    def test_comment_like_sequences_in_strings_document_buggy_behavior(self):
+        """Document current buggy behavior: comment-like sequences in string literals are stripped."""
         with self.subTest("Line comment in string"):
             sql = "SELECT 'This is -- not a comment' FROM my_table;"
             # Document current behavior: strip_sql_comments removes comments inside strings
