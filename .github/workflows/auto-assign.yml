@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   add-reviews:
-    if: ${{ !contains(github.event.pull_request.title, '[no-review]') && !contains(github.event.pull_request.body, '[no-review]') }}
+    if: ${{ !github.event.pull_request.draft && !contains(github.event.pull_request.title, '[no-review]') && !contains(github.event.pull_request.body, '[no-review]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: kentaro-m/auto-assign-action@v2.0.1
