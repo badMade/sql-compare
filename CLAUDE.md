@@ -28,9 +28,11 @@ python sql_compare.py
 
 ## How to Verify Changes
 
-There is no formal test suite. Verify changes by running:
+Run the unit test suite and the smoke tests to verify changes:
 
 ```bash
+# Run unit tests
+python -m unittest discover -s tests
 # Quick smoke test — should exit 0 (queries are canonically equivalent)
 python sql_compare.py examples/A.sql examples/B.sql --mode canonical
 
