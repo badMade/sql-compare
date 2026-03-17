@@ -989,9 +989,20 @@ class SQLCompareGUI:
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
 
         def _readonly_handler(event):
-            if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Prior', 'Next', 'Home', 'End'):
+            CTRL_MASK = 0x0004   # Control on X11/Windows
+            MOD1_MASK = 0x0008   # Command on macOS
+            MODIFIER_KEYSYMS = {'Control_L', 'Control_R', 'Shift_L', 'Shift_R',
+                                'Alt_L', 'Alt_R', 'Super_L', 'Super_R',
+                                'Meta_L', 'Meta_R', 'Caps_Lock', 'Num_Lock'}
+            NAV_KEYSYMS = {'Up', 'Down', 'Left', 'Right', 'Prior', 'Next',
+                           'Home', 'End', 'Tab', 'ISO_Left_Tab'}
+            if event.keysym in MODIFIER_KEYSYMS:
                 return None
-            if event.keysym.lower() in ('c', 'a') and (event.state & 4 or event.state & 8):
+            if event.keysym in NAV_KEYSYMS:
+                return None
+            if event.keysym.startswith('F') and event.keysym[1:].isdigit():
+                return None
+            if event.keysym.lower() in ('c', 'a') and (event.state & (CTRL_MASK | MOD1_MASK)):
                 return None
             return "break"
 

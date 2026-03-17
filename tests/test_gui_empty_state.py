@@ -93,6 +93,50 @@ class TestGUIEmptyState(unittest.TestCase):
         # Text content must remain unchanged after copy
         self.assertEqual(self.gui.txt.get("1.0", "end-1c"), content)
 
+    def test_modifier_only_keys_not_blocked(self) -> None:
+        """Pressing modifier keys alone must not break the widget."""
+        content = "Hello World"
+        self.gui.txt.delete("1.0", "end")
+        self.gui.txt.insert("1.0", content)
+        self.gui.txt.focus_set()
+        self.root.update_idletasks()
+
+        for keysym in ("Control_L", "Shift_L", "Alt_L"):
+            self.gui.txt.event_generate("<KeyPress>", keysym=keysym)
+            self.root.update_idletasks()
+            self.assertEqual(
+                self.gui.txt.get("1.0", "end-1c"),
+                content,
+                f"Text changed after modifier key {keysym}",
+            )
+
+    def test_tab_key_not_blocked(self) -> None:
+        """Tab key must pass through for focus traversal."""
+        content = "Hello World"
+        self.gui.txt.delete("1.0", "end")
+        self.gui.txt.insert("1.0", content)
+        self.gui.txt.focus_set()
+        self.root.update_idletasks()
+
+        self.gui.txt.event_generate("<Tab>")
+        self.root.update_idletasks()
+
+        # Text content must be unchanged (Tab should not insert a tab character)
+        self.assertEqual(self.gui.txt.get("1.0", "end-1c"), content)
+
+    def test_function_keys_not_blocked(self) -> None:
+        """Function keys must pass through."""
+        content = "Hello World"
+        self.gui.txt.delete("1.0", "end")
+        self.gui.txt.insert("1.0", content)
+        self.gui.txt.focus_set()
+        self.root.update_idletasks()
+
+        self.gui.txt.event_generate("<F5>")
+        self.root.update_idletasks()
+
+        self.assertEqual(self.gui.txt.get("1.0", "end-1c"), content)
+
     def test_initial_empty_state(self) -> None:
         # Assert tag exists and has correct config
         self.assertEqual(self.gui.txt.tag_cget("empty", "foreground"), "gray")
