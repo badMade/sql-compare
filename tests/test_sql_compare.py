@@ -388,7 +388,7 @@ class TestSecurity(unittest.TestCase):
         """Verify that read_from_stdin_two_parts limits read size to prevent DoS."""
         import sys
         from unittest.mock import patch
-        from sql_compare import read_from_stdin_two_parts, MAX_FILE_SIZE_BYTES
+        from sql_compare import read_from_stdin_two_parts
 
         class MockStdin:
             def read(self, size=-1):
@@ -396,7 +396,7 @@ class TestSecurity(unittest.TestCase):
                     raise Exception("Unbounded read called!")
                 return "a" * size
 
-        with patch("sys.stdin", MockStdin()):
+        with patch('sql_compare.MAX_FILE_SIZE_BYTES', 100), patch("sys.stdin", MockStdin()):
             with self.assertRaisesRegex(ValueError, "Input too large: stdin exceeds"):
                 read_from_stdin_two_parts()
 
