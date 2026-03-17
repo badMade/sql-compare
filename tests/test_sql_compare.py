@@ -3,6 +3,7 @@ from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
     top_level_find_kw,
+    build_difference_summary,
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -406,6 +407,143 @@ class TestSecurity(unittest.TestCase):
             self.assertIn('&lt;script&gt;', html_content)
         finally:
             os.unlink(tmp_path)
+
+
+
+
+class TestBuildDifferenceSummary(unittest.TestCase):
+    def test_no_structural_differences(self):
+        norm_a = "SELECT id FROM users WHERE active = 1"
+        norm_b = "SELECT id FROM users WHERE active = 1"
+        tokens_a = ["SELECT", " ", "id", " ", "FROM", " ", "users", " ", "WHERE", " ", "active", " ", "=", " ", "1"]
+        tokens_b = ["SELECT", " ", "id", " ", "FROM", " ", "users", " ", "WHERE", " ", "active", " ", "=", " ", "1"]
+
+        summary = build_difference_summary(
+            norm_a, norm_b, "", "", tokens_a, tokens_b,
+            enable_join_reorder=True, allow_full_outer=False, allow_left=False
+        )
+        self.assertEqual(summary, ["No structural differences detected beyond normalization."])
+
+    def test_select_list_differs_missing(self):
+        norm_a = "SELECT id, name FROM users"
+        norm_b = "SELECT id FROM users"
+        tokens_a = ["SELECT", " ", "id", ",", " ", "name", " ", "FROM", " ", "users"]
+        tokens_b = ["SELECT", " ", "id", " ", "FROM", " ", "users"]
+
+        summary = build_difference_summary(
+            norm_a, norm_b, "", "", tokens_a, tokens_b,
+            enable_join_reorder=True, allow_full_outer=False, allow_left=False
+        )
+        self.assertIn("SELECT list differs: items only in SQL1: 1", summary)
+        self.assertTrue(any("Token-level changes" in s for s in summary))
+
+    def test_select_list_differs_added(self):
+        norm_a = "SELECT id FROM users"
+        norm_b = "SELECT id, name FROM users"
+        tokens_a = ["SELECT", " ", "id", " ", "FROM", " ", "users"]
+        tokens_b = ["SELECT", " ", "id", ",", " ", "name", " ", "FROM", " ", "users"]
+
+        summary = build_difference_summary(
+            norm_a, norm_b, "", "", tokens_a, tokens_b,
+            enable_join_reorder=True, allow_full_outer=False, allow_left=False
+        )
+        self.assertIn("SELECT list differs: items only in SQL2: 1", summary)
+
+    def test_select_list_order_differs(self):
+        norm_a = "SELECT id, name FROM users"
+        norm_b = "SELECT name, id FROM users"
+        tokens_a = ["SELECT", " ", "id", ",", " ", "name", " ", "FROM", " ", "users"]
+        tokens_b = ["SELECT", " ", "name", ",", " ", "id", " ", "FROM", " ", "users"]
+
+        summary = build_difference_summary(
+            norm_a, norm_b, "", "", tokens_a, tokens_b,
+            enable_join_reorder=True, allow_full_outer=False, allow_left=False
+        )
+        self.assertIn("SELECT list order differs (same items, different order).", summary)
+
+    def test_where_and_terms_differ_missing(self):
+        norm_a = "SELECT id FROM users WHERE active = 1 AND role = 'admin'"
+        norm_b = "SELECT id FROM users WHERE active = 1"
+        tokens_a = ["SELECT", " ", "id", " ", "FROM", " ", "users", " ", "WHERE", " ", "active", " ", "=", " ", "1", " ", "AND", " ", "role", " ", "=", " ", "'admin'"]
+        tokens_b = ["SELECT", " ", "id", " ", "FROM", " ", "users", " ", "WHERE", " ", "active", " ", "=", " ", "1"]
+
+        summary = build_difference_summary(
+            norm_a, norm_b, "", "", tokens_a, tokens_b,
+            enable_join_reorder=True, allow_full_outer=False, allow_left=False
+        )
+        self.assertIn("WHERE AND terms differ: terms only in SQL1: 1", summary)
+
+    def test_where_and_terms_differ_added(self):
+        norm_a = "SELECT id FROM users WHERE active = 1"
+        norm_b = "SELECT id FROM users WHERE active = 1 AND role = 'admin'"
+        tokens_a = ["SELECT", " ", "id", " ", "FROM", " ", "users", " ", "WHERE", " ", "active", " ", "=", " ", "1"]
+        tokens_b = ["SELECT", " ", "id", " ", "FROM", " ", "users", " ", "WHERE", " ", "active", " ", "=", " ", "1", " ", "AND", " ", "role", " ", "=", " ", "'admin'"]
+
+        summary = build_difference_summary(
+            norm_a, norm_b, "", "", tokens_a, tokens_b,
+            enable_join_reorder=True, allow_full_outer=False, allow_left=False
+        )
+        self.assertIn("WHERE AND terms differ: terms only in SQL2: 1", summary)
+
+    def test_where_and_terms_order_differs(self):
+        norm_a = "SELECT id FROM users WHERE active = 1 AND role = 'admin'"
+        norm_b = "SELECT id FROM users WHERE role = 'admin' AND active = 1"
+        tokens_a = ["SELECT", " ", "id", " ", "FROM", " ", "users", " ", "WHERE", " ", "active", " ", "=", " ", "1", " ", "AND", " ", "role", " ", "=", " ", "'admin'"]
+        tokens_b = ["SELECT", " ", "id", " ", "FROM", " ", "users", " ", "WHERE", " ", "role", " ", "=", " ", "'admin'", " ", "AND", " ", "active", " ", "=", " ", "1"]
+
+        summary = build_difference_summary(
+            norm_a, norm_b, "", "", tokens_a, tokens_b,
+            enable_join_reorder=True, allow_full_outer=False, allow_left=False
+        )
+        self.assertIn("WHERE AND term order differs (same terms, different order).", summary)
+
+    def test_join_analysis_reorderable_components_differ_missing(self):
+        norm_a = "SELECT id FROM users JOIN roles ON users.role_id = roles.id JOIN permissions ON roles.id = permissions.role_id"
+        norm_b = "SELECT id FROM users JOIN roles ON users.role_id = roles.id"
+        tokens_a = []
+        tokens_b = []
+
+        summary = build_difference_summary(
+            norm_a, norm_b, "", "", tokens_a, tokens_b,
+            enable_join_reorder=True, allow_full_outer=False, allow_left=False
+        )
+        self.assertIn("Reorderable JOIN components differ: 1 only in SQL1.", summary)
+
+    def test_join_analysis_reorderable_components_differ_added(self):
+        norm_a = "SELECT id FROM users JOIN roles ON users.role_id = roles.id"
+        norm_b = "SELECT id FROM users JOIN roles ON users.role_id = roles.id JOIN permissions ON roles.id = permissions.role_id"
+        tokens_a = []
+        tokens_b = []
+
+        summary = build_difference_summary(
+            norm_a, norm_b, "", "", tokens_a, tokens_b,
+            enable_join_reorder=True, allow_full_outer=False, allow_left=False
+        )
+        self.assertIn("Reorderable JOIN components differ: 1 only in SQL2.", summary)
+
+    def test_join_analysis_reorderable_segments_order_differs(self):
+        norm_a = "SELECT id FROM users JOIN roles ON users.role_id = roles.id JOIN permissions ON roles.id = permissions.role_id"
+        norm_b = "SELECT id FROM users JOIN permissions ON roles.id = permissions.role_id JOIN roles ON users.role_id = roles.id"
+        tokens_a = []
+        tokens_b = []
+
+        summary = build_difference_summary(
+            norm_a, norm_b, "", "", tokens_a, tokens_b,
+            enable_join_reorder=True, allow_full_outer=False, allow_left=False
+        )
+        self.assertIn("Reorderable JOIN segment order differs (same components, different order).", summary)
+
+    def test_join_reordering_disabled(self):
+        norm_a = "SELECT id FROM users JOIN roles ON users.role_id = roles.id JOIN permissions ON roles.id = permissions.role_id"
+        norm_b = "SELECT id FROM users JOIN permissions ON roles.id = permissions.role_id JOIN roles ON users.role_id = roles.id"
+        tokens_a = []
+        tokens_b = []
+
+        summary = build_difference_summary(
+            norm_a, norm_b, "", "", tokens_a, tokens_b,
+            enable_join_reorder=False, allow_full_outer=False, allow_left=False
+        )
+        self.assertIn("Join reordering is disabled; join order is considered significant in comparisons.", summary)
 
 
 if __name__ == '__main__':
