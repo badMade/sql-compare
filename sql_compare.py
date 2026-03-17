@@ -761,9 +761,10 @@ def parse_args(argv):
 
 
 def read_from_stdin_two_parts():
-    raw = sys.stdin.read(MAX_FILE_SIZE_BYTES + 1)
-    if len(raw) > MAX_FILE_SIZE_BYTES:
+    data = sys.stdin.buffer.read(MAX_FILE_SIZE_BYTES + 1)
+    if len(data) > MAX_FILE_SIZE_BYTES:
         raise ValueError(f"Input too large: stdin exceeds {MAX_FILE_SIZE_MB} MB limit.")
+    raw = data.decode("utf-8", errors="ignore")
     parts = re.split(r"^\s*---\s*$", raw, flags=re.M)
     if len(parts) != 2:
         raise ValueError("When using --stdin, provide exactly two parts separated by a line containing only ---")
