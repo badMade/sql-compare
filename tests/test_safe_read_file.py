@@ -5,8 +5,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 # Import the function and constants to test
-import sql_compare
-from sql_compare import safe_read_file
+from sql_compare import safe_read_file, MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB
 
 class TestSafeReadFile(unittest.TestCase):
     def setUp(self):
