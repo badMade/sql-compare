@@ -468,6 +468,10 @@ class TestNormalizeSQL(unittest.TestCase):
         """Test normalize_sql with a complex combination of various rules."""
         test_cases = [
             ("Complex combination of all rules",
+             "/* start */ \n ( \n  select \n  a, 'b -- c', "d /* e */" \n  -- inline comment \n  from t1 \n ) ; \n ",
+             # Documenting current buggy behavior: comment stripping inside string literals
+             # leads to malformed output and affects outer parentheses removal.
+             "( SELECT A, 'b from t1 )")
              "/* start */ \n ( \n  select \n  a, 'b -- c', \"d /* e */\" \n  -- inline comment \n  from t1 \n ) ; \n ",
              "( SELECT A, 'b from t1 )"),
         ]
