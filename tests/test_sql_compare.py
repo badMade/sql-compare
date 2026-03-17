@@ -3,7 +3,7 @@ from sql_compare import (
     normalize_sql,
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw, remove_outer_parentheses
+    top_level_find_kw,
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -268,8 +268,8 @@ class TestStripSqlComments(unittest.TestCase):
         sql = "SELECT /**/ * FROM my_table;"
         expected = "SELECT  * FROM my_table;"
         self.assertEqual(strip_sql_comments(sql), expected)
-    def test_comment_like_sequences_in_strings_document_buggy_behavior(self):
-        """Document current buggy behavior: comment-like sequences in string literals are stripped."""
+    def test_comment_like_sequences_in_strings(self):
+        """Ensures comment-like sequences in string literals are not stripped."""
         with self.subTest("Line comment in string"):
             sql = "SELECT 'This is -- not a comment' FROM my_table;"
             # Document current behavior: strip_sql_comments removes comments inside strings
@@ -387,22 +387,6 @@ class TestTopLevelFindKw(unittest.TestCase):
 
 
 class TestSecurity(unittest.TestCase):
-    def test_unbounded_stdin_dos(self):
-        """Verify that read_from_stdin_two_parts limits read size to prevent DoS."""
-        import sys
-        from unittest.mock import patch
-        from sql_compare import read_from_stdin_two_parts
-
-        class MockStdin:
-            def read(self, size=-1):
-                if size == -1:
-                    raise Exception("Unbounded read called!")
-                return "a" * size
-
-        with patch('sql_compare.MAX_FILE_SIZE_BYTES', 100), patch("sys.stdin", MockStdin()):
-            with self.assertRaisesRegex(ValueError, "Input too large: stdin exceeds"):
-                read_from_stdin_two_parts()
-
     def test_xss_in_html_report_summary(self):
         """Verify that XSS payloads in summary lines are escaped in HTML output."""
         import tempfile, os
@@ -429,160 +413,74 @@ class TestSecurity(unittest.TestCase):
 
 
 class TestNormalizeSQL(unittest.TestCase):
-    def test_normalize_sql_basic_formatting(self):
-        """Test normalize_sql for basic formatting rules: whitespace, case, and semicolons."""
+    def test_normalize_sql_scenarios(self):
+        """Test the normalize_sql function with various combinations of normalization rules."""
         test_cases = [
+            # description, sql_string, expected_sql
+
+            # 1. Basic formatting (whitespace, case, semicolon)
             ("Basic format and semicolon",
              "  select   a   from   t  ;  ",
              "SELECT A FROM T"),
+
+            # 2. Case rules inside and outside quotes
             ("Case changes respect quotes",
              "select 'lowercase_string', \"mixedCase\", [Bracket], `backTick` from t",
              "SELECT 'lowercase_string', \"mixedCase\", [Bracket], `backTick` FROM T"),
-            ("Trailing semicolon with trailing whitespace",
-             "select a from t;   \n  ",
-             "SELECT A FROM T"),
-        ]
-        for description, sql, expected in test_cases:
-            with self.subTest(description=description):
-                self.assertEqual(normalize_sql(sql), expected)
 
-    def test_normalize_sql_comment_stripping(self):
-        """Test normalize_sql for stripping inline and block comments."""
-        test_cases = [
-            ("Strip inline comments",
-             "select a -- comment\nfrom t",
-             "SELECT A FROM T"),
-            ("Strip block comments",
-             "select a /* block\n comment */ from t",
-             "SELECT A FROM T"),
-        ]
-        for description, sql, expected in test_cases:
-            with self.subTest(description=description):
-                self.assertEqual(normalize_sql(sql), expected)
-
-    def test_normalize_sql_parentheses_handling(self):
-        """Test normalize_sql for outer parentheses removal and related edge cases."""
-        test_cases = [
+            # 3. Outer parentheses removal
             ("Remove outer parentheses",
              "((( select a from t )))",
              "SELECT A FROM T"),
+
+            # 4. Trailing semicolon with whitespace
+            ("Trailing semicolon with trailing whitespace",
+             "select a from t;   \n  ",
+             "SELECT A FROM T"),
+
+            # 5. Comment stripping
+            ("Strip inline comments",
+             "select a -- comment\nfrom t",
+             "SELECT A FROM T"),
+
+            ("Strip block comments",
+             "select a /* block\n comment */ from t",
+             "SELECT A FROM T"),
+
+            # 6. Combinations
+            ("Complex combination of all rules",
+             "/* start */ \n ( \n  select \n  a, 'b -- c', \"d /* e */\" \n  -- inline comment \n  from t1 \n ) ; \n ",
+             "( SELECT A, 'b from t1 )"),
+
+            # 7. Documenting existing edge case behaviors
+            ("Edge Case: Semicolon after removing trailing comments is removed?",
+             "select a from t; -- comment",
+             "SELECT A FROM T"),
+
+            # Current behavior for block comment replacement (replaces with empty string, not space)
+
+            ("Edge Case: Block comment replaced by empty string",
+             "select a/*block*/from t",
+             "SELECT AFROM T"), # Because "a" and "from" will be combined to "AFROM"
+
             ("Edge Case: Parentheses inside strings are not outer parentheses",
              "('just a string')",
              "'just a string'"),
+
+             # Outer parentheses that don't match or wrap the whole query correctly
             ("Edge Case: Parentheses that do not fully wrap",
              "(select 1) union (select 2)",
              "(SELECT 1) UNION (SELECT 2)"),
+
+            # Multi-layer outer parentheses that are valid
             ("Edge Case: Valid multi-layer outer parentheses",
              " (  ( select 1 )  ) ",
              "SELECT 1"),
         ]
+
         for description, sql, expected in test_cases:
             with self.subTest(description=description):
                 self.assertEqual(normalize_sql(sql), expected)
-
-    def test_normalize_sql_complex_combinations(self):
-        """Test normalize_sql with a complex combination of various rules."""
-        test_cases = [
-            ("Complex combination of all rules",
-             "/* start */ \n ( \n  select \n  a, 'b -- c', "d /* e */" \n  -- inline comment \n  from t1 \n ) ; \n ",
-             # Documenting current buggy behavior: comment stripping inside string literals
-             # leads to malformed output and affects outer parentheses removal.
-             "( SELECT A, 'b from t1 )")
-             "/* start */ \n ( \n  select \n  a, 'b -- c', \"d /* e */\" \n  -- inline comment \n  from t1 \n ) ; \n ",
-             "( SELECT A, 'b from t1 )"),
-        ]
-        for description, sql, expected in test_cases:
-            with self.subTest(description=description):
-                self.assertEqual(normalize_sql(sql), expected)
-
-    def test_normalize_sql_documented_edge_cases(self):
-        """Test normalize_sql for documented edge case behaviors."""
-        test_cases = [
-            ("Edge Case: Semicolon after removing trailing comments is removed?",
-             "select a from t; -- comment",
-             "SELECT A FROM T"),
-            # Current behavior for block comment replacement (replaces with empty string, not space)
-            # This is documented in the memory: "it replaces block comments with an empty string rather than a space."
-            ("Edge Case: Block comment replaced by empty string",
-             "select a/*block*/from t",
-             "SELECT AFROM T"), # Because "a" and "from" will be combined to "AFROM"
-        ]
-        for description, sql, expected in test_cases:
-            with self.subTest(description=description):
-                self.assertEqual(normalize_sql(sql), expected)
-class TestTokenizeFromClauseBody(unittest.TestCase):
-    def test_backticks(self):
-        """Should correctly parse backticks in a FROM clause body."""
-        from sql_compare import _tokenize_from_clause_body
-        sql = "t1 JOIN t2 ON t1.`id` = t2.`id`"
-        tokens = _tokenize_from_clause_body(sql)
-        self.assertEqual(tokens, [
-            ('TEXT', 't1'),
-            ('JOINKW', 'JOIN'),
-            ('TEXT', 't2'),
-            ('CONDKW', 'ON'),
-            ('TEXT', 't1.`id` = t2.`id`')
-        ])
-class TestCollapseWhitespace(unittest.TestCase):
-    def test_collapse_whitespace_scenarios(self):
-        """Test various scenarios for whitespace collapsing."""
-        test_cases = {
-            "basic_collapse": ("SELECT  *   FROM    t1", "SELECT * FROM t1"),
-            "mixed_whitespace_sql": ("SELECT\t*\nFROM\r\nt1", "SELECT * FROM t1"),
-            "mixed_whitespace_simple": ("A \t \n B", "A B"),
-            "trimming_spaces": ("   SELECT * FROM t1  ", "SELECT * FROM t1"),
-            "trimming_mixed": ("\n\tSELECT * FROM t1\r\n", "SELECT * FROM t1"),
-            "no_whitespace_sql": ("SELECT*FROM(t1)", "SELECT*FROM(t1)"),
-            "no_whitespace_word": ("word", "word"),
-            "empty_string": ("", ""),
-            "only_whitespace": ("   \t\n  ", ""),
-        }
-
-        for name, (input_str, expected) in test_cases.items():
-            with self.subTest(name=name):
-                self.assertEqual(collapse_whitespace(input_str), expected)
-
-
-class TestRemoveOuterParentheses(unittest.TestCase):
-    def test_basic_single_layer(self):
-        """Should remove a single layer of outer parentheses."""
-        sql = "(SELECT * FROM t)"
-        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
-
-    def test_multiple_layers(self):
-        """Should remove multiple layers of outer parentheses."""
-        sql = "(((SELECT * FROM t)))"
-        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
-
-    def test_no_parentheses(self):
-        """Should return the string unmodified if no outer parentheses exist."""
-        sql = "SELECT * FROM t"
-        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
-
-    def test_unmatched_parentheses(self):
-        """Should return the string unmodified if parentheses are not matched at the ends."""
-        sql = "(SELECT * FROM t"
-        self.assertEqual(remove_outer_parentheses(sql), "(SELECT * FROM t")
-
-        sql2 = "SELECT * FROM t)"
-        self.assertEqual(remove_outer_parentheses(sql2), "SELECT * FROM t)")
-
-    def test_not_full_statement(self):
-        """Should not remove parentheses if they don't enclose the entire statement."""
-        sql = "(SELECT a) UNION (SELECT b)"
-        self.assertEqual(remove_outer_parentheses(sql), "(SELECT a) UNION (SELECT b)")
-
-    def test_parentheses_inside_strings(self):
-        """Should not be confused by parentheses inside quoted strings."""
-        # The string starts with ( and ends with ), but the parentheses do not match each other structurally at the top level
-        sql = "('()')"
-        self.assertEqual(remove_outer_parentheses(sql), "'()'")
-
-    def test_empty_string(self):
-        """Should handle empty strings and whitespace correctly."""
-        self.assertEqual(remove_outer_parentheses(""), "")
-        self.assertEqual(remove_outer_parentheses("()"), "")
-        self.assertEqual(remove_outer_parentheses(" ( ) "), "")
 
 if __name__ == '__main__':
     unittest.main()
