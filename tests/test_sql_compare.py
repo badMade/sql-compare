@@ -1,7 +1,7 @@
 import unittest
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
-    strip_sql_comments, uppercase_outside_quotes,
+    strip_sql_comments, collapse_whitespace, uppercase_outside_quotes,
     top_level_find_kw,
 )
 
@@ -406,6 +406,32 @@ class TestSecurity(unittest.TestCase):
             self.assertIn('&lt;script&gt;', html_content)
         finally:
             os.unlink(tmp_path)
+
+
+class TestCollapseWhitespace(unittest.TestCase):
+    def test_basic_collapse(self):
+        """Test multiple spaces collapsing into one."""
+        self.assertEqual(collapse_whitespace("SELECT  *   FROM    t1"), "SELECT * FROM t1")
+
+    def test_mixed_whitespace(self):
+        """Test tabs, newlines, and carriage returns collapsing into one space."""
+        self.assertEqual(collapse_whitespace("SELECT\t*\nFROM\r\nt1"), "SELECT * FROM t1")
+        self.assertEqual(collapse_whitespace("A \t \n B"), "A B")
+
+    def test_trimming(self):
+        """Test that leading and trailing whitespace is completely stripped."""
+        self.assertEqual(collapse_whitespace("   SELECT * FROM t1  "), "SELECT * FROM t1")
+        self.assertEqual(collapse_whitespace("\n\tSELECT * FROM t1\r\n"), "SELECT * FROM t1")
+
+    def test_no_whitespace(self):
+        """Test that strings without whitespace are unchanged."""
+        self.assertEqual(collapse_whitespace("SELECT*FROM(t1)"), "SELECT*FROM(t1)")
+        self.assertEqual(collapse_whitespace("word"), "word")
+
+    def test_empty_string(self):
+        """Test that an empty string returns an empty string."""
+        self.assertEqual(collapse_whitespace(""), "")
+        self.assertEqual(collapse_whitespace("   \t\n  "), "")
 
 
 if __name__ == '__main__':
