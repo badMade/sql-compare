@@ -408,5 +408,47 @@ class TestSecurity(unittest.TestCase):
             os.unlink(tmp_path)
 
 
+from unittest.mock import patch
+from sql_compare import read_from_stdin_two_parts
+
+class TestReadFromStdinTwoParts(unittest.TestCase):
+    @patch('sys.stdin.read')
+    def test_valid_input_two_parts(self, mock_stdin_read):
+        """Valid input with exactly two parts separated by '---'."""
+        mock_stdin_read.return_value = "part1\n---\npart2"
+        part1, part2 = read_from_stdin_two_parts()
+        self.assertEqual(part1, "part1")
+        self.assertEqual(part2, "part2")
+
+    @patch('sys.stdin.read')
+    def test_valid_input_with_whitespace(self, mock_stdin_read):
+        """Whitespace around '---' and parts is stripped correctly."""
+        mock_stdin_read.return_value = "  SELECT * FROM A  \n  ---  \n  SELECT * FROM B  "
+        part1, part2 = read_from_stdin_two_parts()
+        self.assertEqual(part1, "SELECT * FROM A")
+        self.assertEqual(part2, "SELECT * FROM B")
+
+    @patch('sys.stdin.read')
+    def test_missing_separator_raises_value_error(self, mock_stdin_read):
+        """Input with no '---' separator raises ValueError."""
+        mock_stdin_read.return_value = "part1\npart2"
+        with self.assertRaisesRegex(ValueError, "exactly two parts"):
+            read_from_stdin_two_parts()
+
+    @patch('sys.stdin.read')
+    def test_empty_input_raises_value_error(self, mock_stdin_read):
+        """Empty input raises ValueError."""
+        mock_stdin_read.return_value = ""
+        with self.assertRaisesRegex(ValueError, "exactly two parts"):
+            read_from_stdin_two_parts()
+
+    @patch('sys.stdin.read')
+    def test_multiple_separators_raises_value_error(self, mock_stdin_read):
+        """Input with multiple '---' separators raises ValueError."""
+        mock_stdin_read.return_value = "part1\n---\npart2\n---\npart3"
+        with self.assertRaisesRegex(ValueError, "exactly two parts"):
+            read_from_stdin_two_parts()
+
+
 if __name__ == '__main__':
     unittest.main()
