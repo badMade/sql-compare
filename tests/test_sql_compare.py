@@ -409,30 +409,23 @@ class TestSecurity(unittest.TestCase):
 
 
 class TestCollapseWhitespace(unittest.TestCase):
-    def test_basic_collapse(self):
-        """Test multiple spaces collapsing into one."""
-        self.assertEqual(collapse_whitespace("SELECT  *   FROM    t1"), "SELECT * FROM t1")
+    def test_collapse_whitespace_scenarios(self):
+        """Test various scenarios for whitespace collapsing."""
+        test_cases = {
+            "basic_collapse": ("SELECT  *   FROM    t1", "SELECT * FROM t1"),
+            "mixed_whitespace_sql": ("SELECT\t*\nFROM\r\nt1", "SELECT * FROM t1"),
+            "mixed_whitespace_simple": ("A \t \n B", "A B"),
+            "trimming_spaces": ("   SELECT * FROM t1  ", "SELECT * FROM t1"),
+            "trimming_mixed": ("\n\tSELECT * FROM t1\r\n", "SELECT * FROM t1"),
+            "no_whitespace_sql": ("SELECT*FROM(t1)", "SELECT*FROM(t1)"),
+            "no_whitespace_word": ("word", "word"),
+            "empty_string": ("", ""),
+            "only_whitespace": ("   \t\n  ", ""),
+        }
 
-    def test_mixed_whitespace(self):
-        """Test tabs, newlines, and carriage returns collapsing into one space."""
-        self.assertEqual(collapse_whitespace("SELECT\t*\nFROM\r\nt1"), "SELECT * FROM t1")
-        self.assertEqual(collapse_whitespace("A \t \n B"), "A B")
-
-    def test_trimming(self):
-        """Test that leading and trailing whitespace is completely stripped."""
-        self.assertEqual(collapse_whitespace("   SELECT * FROM t1  "), "SELECT * FROM t1")
-        self.assertEqual(collapse_whitespace("\n\tSELECT * FROM t1\r\n"), "SELECT * FROM t1")
-
-    def test_no_whitespace(self):
-        """Test that strings without whitespace are unchanged."""
-        self.assertEqual(collapse_whitespace("SELECT*FROM(t1)"), "SELECT*FROM(t1)")
-        self.assertEqual(collapse_whitespace("word"), "word")
-
-    def test_empty_string(self):
-        """Test that an empty string returns an empty string."""
-        self.assertEqual(collapse_whitespace(""), "")
-        self.assertEqual(collapse_whitespace("   \t\n  "), "")
-
+        for name, (input_str, expected) in test_cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(collapse_whitespace(input_str), expected)
 
 if __name__ == '__main__':
     unittest.main()
