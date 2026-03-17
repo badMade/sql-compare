@@ -3,6 +3,7 @@ from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
     top_level_find_kw,
+    canonicalize_select_list,
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -407,6 +408,56 @@ class TestSecurity(unittest.TestCase):
         finally:
             os.unlink(tmp_path)
 
+
+
+class TestCanonicalizeSelectList(unittest.TestCase):
+    def test_basic_select_list_reorder(self):
+        """Select list items should be reordered alphabetically."""
+        sql = "SELECT b, a, c FROM t"
+        expected = "SELECT a, b, c FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
+
+    def test_single_item(self):
+        """Single items should not be changed."""
+        sql = "SELECT a FROM t"
+        self.assertEqual(canonicalize_select_list(sql), sql)
+
+    def test_case_insensitive_sort(self):
+        """Sorting should be case-insensitive."""
+        sql = "SELECT Z, a, B FROM t"
+        expected = "SELECT a, B, Z FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
+
+    def test_missing_select_or_from(self):
+        """Missing SELECT or FROM should return the original string."""
+        self.assertEqual(canonicalize_select_list("UPDATE t SET a=1, b=2"), "UPDATE t SET a=1, b=2")
+        self.assertEqual(canonicalize_select_list("SELECT a, b"), "SELECT a, b")
+
+    def test_nested_commas(self):
+        """Commas inside strings, functions, and subqueries should not split items."""
+        sql = "SELECT coalesce(b, c), 'e, f', (SELECT h, g), a FROM t"
+        expected = "SELECT 'e, f', (SELECT h, g), a, coalesce(b, c) FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
+
+    def test_whitespace_collapse(self):
+        """Extra whitespace inside items and between items should be collapsed."""
+        sql = "SELECT   b   ,    a   FROM   t"
+        expected = "SELECT a, b FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
+
+    def test_select_distinct(self):
+        """DISTINCT keyword shouldn't break the sorting entirely but it will sort 'DISTINCT a' as a whole item if not parsed."""
+        # Note: Given the current implementation 'DISTINCT b, a' gets split into 'DISTINCT b' and 'a',
+        # sorting as 'a, DISTINCT b'. Documenting the existing behavior here.
+        sql = "SELECT DISTINCT b, a FROM t"
+        expected = "SELECT a, DISTINCT b FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
+
+    def test_aliases(self):
+        """Aliases should be sorted along with their columns as a single unit."""
+        sql = "SELECT b AS x, a AS y FROM t"
+        expected = "SELECT a AS y, b AS x FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
 
 if __name__ == '__main__':
     unittest.main()
