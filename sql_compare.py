@@ -414,7 +414,6 @@ def _tokenize_from_clause_body(body: str) -> list:
                 else: mode = None
             elif mode == 'bracket' and ch == ']': mode = None
             elif mode == 'backtick' and ch == '`': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
         buf.append(ch)
         i += 1
     flush_buf()
