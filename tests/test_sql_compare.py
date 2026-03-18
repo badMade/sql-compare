@@ -1,8 +1,11 @@
 import unittest
+import argparse
+from unittest.mock import patch
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw,
+    top_level_find_kw, collapse_whitespace,
+    _tokenize_from_clause_body,
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -73,6 +76,146 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_using_clause_reorder(self):
+        """USING clauses are preserved correctly when joins are reordered."""
+        sql = "SELECT * FROM t1 JOIN t3 USING (id) JOIN t2 USING (id)"
+        expected = "SELECT * FROM t1 JOIN t2 USING (id) JOIN t3 USING (id)"
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_single_quoted_join_keyword_in_condition(self):
+        """JOIN keyword inside a single-quoted string in a condition should not be
+        treated as a join separator — the outer joins must still be reordered."""
+        sql = "SELECT * FROM t1 JOIN t3 ON t1.name = 'JOIN me' JOIN t2 ON t1.id = t2.id"
+        expected = "SELECT * FROM t1 JOIN t2 ON t1.id = t2.id JOIN t3 ON t1.name = 'JOIN me'"
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_bracketed_keyword_as_table_name(self):
+        """A bracketed keyword used as a table name (e.g. [ON]) must not be
+        misinterpreted as a SQL keyword — outer joins must still be reordered."""
+        sql = "SELECT * FROM t1 JOIN [ON] ON t1.id = [ON].id JOIN t0 ON t1.id = t0.id"
+        # "[ON]" sorts after "t0" because "[" (ASCII 91) > "T" (ASCII 84)
+        expected = "SELECT * FROM t1 JOIN t0 ON t1.id = t0.id JOIN [ON] ON t1.id = [ON].id"
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_backtick_keyword_as_table_name(self):
+        """A backtick-quoted keyword used as a table name (e.g. `JOIN`) must not be
+        misinterpreted as a SQL keyword — outer joins must still be reordered."""
+        sql = "SELECT * FROM t1 JOIN `JOIN` ON t1.id = `JOIN`.id JOIN t0 ON t1.id = t0.id"
+        # "`JOIN`" sorts after "t0" because "`" (ASCII 96) > "T" (ASCII 84)
+        expected = "SELECT * FROM t1 JOIN t0 ON t1.id = t0.id JOIN `JOIN` ON t1.id = `JOIN`.id"
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_derived_table_subquery_reorder(self):
+        """JOIN/ON inside a parenthesized derived table should be treated as part of
+        the table expression and must not interfere with top-level join reordering."""
+        sql = (
+            "SELECT * FROM t1 "
+            "JOIN tz ON t1.id = tz.id "
+            "JOIN (SELECT a FROM t2 JOIN t3 ON t2.id = t3.id) sub ON t1.id = sub.id"
+        )
+        # "(SELECT..." sorts before "tz" because "(" (ASCII 40) < "T" (ASCII 84)
+        expected = (
+            "SELECT * FROM t1 "
+            "JOIN (SELECT a FROM t2 JOIN t3 ON t2.id = t3.id) sub ON t1.id = sub.id "
+            "JOIN tz ON t1.id = tz.id"
+        )
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_derived_table_inner_joins_not_split_out(self):
+        """Inner JOINs inside a derived table must not appear as separate top-level
+        join segments — only the two outer JOINs should be present after reordering."""
+        sql = (
+            "SELECT * FROM t1 "
+            "JOIN tz ON t1.id = tz.id "
+            "JOIN (SELECT a FROM inner1 JOIN inner2 ON inner1.id = inner2.id) sub "
+            "ON t1.id = sub.id"
+        )
+        result = canonicalize_joins(sql)
+        # The subquery body must be preserved as a single unit
+        self.assertIn("(SELECT a FROM inner1 JOIN inner2 ON inner1.id = inner2.id)", result)
+        # inner1 and inner2 must not appear as standalone top-level join targets
+        # (i.e. there should be exactly 3 JOIN occurrences: 2 outer + 1 inside the subquery)
+        self.assertEqual(result.upper().count("JOIN"), 3)
+
+
+class TestTokenizeFromClauseBodyEdgeCases(unittest.TestCase):
+    """Unit tests for _tokenize_from_clause_body, focusing on edge cases where
+    SQL keywords appear inside quoted identifiers or parenthesized subqueries."""
+
+    def _token_kinds(self, tokens):
+        """Return only the token-kind portion of each token."""
+        return [k for k, _ in tokens]
+
+    def test_basic_single_join(self):
+        """Simple JOIN/ON produces TEXT, JOINKW, TEXT, CONDKW, TEXT."""
+        tokens = _tokenize_from_clause_body("t1 JOIN t2 ON t1.id = t2.id")
+        self.assertEqual(self._token_kinds(tokens), ["TEXT", "JOINKW", "TEXT", "CONDKW", "TEXT"])
+
+    def test_join_on_inside_subquery_not_top_level(self):
+        """JOIN and ON inside a parenthesized subquery must not be emitted as
+        top-level JOINKW/CONDKW tokens (level > 0 while inside the parens)."""
+        body = "t1 JOIN (SELECT * FROM t2 JOIN t3 ON t2.id = t3.id) sub ON t1.id = sub.id"
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1,
+                         "Expected exactly one top-level JOINKW")
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1,
+                         "Expected exactly one top-level CONDKW")
+
+    def test_join_inside_deeply_nested_parens_ignored(self):
+        """JOIN inside multiply-nested parentheses must not become a top-level token."""
+        body = "t1 JOIN ((SELECT * FROM t2 JOIN t3 ON t2.id = t3.id)) sub ON t1.id = sub.id"
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1)
+
+    def test_keyword_inside_single_quotes_ignored(self):
+        """JOIN and ON keywords inside a single-quoted string literal must not
+        produce extra JOINKW or CONDKW tokens."""
+        body = "t1 JOIN t2 ON t1.name = 'JOIN ON USING'"
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1)
+
+    def test_keyword_inside_double_quotes_ignored(self):
+        """A double-quoted identifier containing a SQL keyword must not produce an
+        extra JOINKW token; the quoted string is captured as part of a TEXT segment."""
+        body = 't1 JOIN "JOIN" ON t1.id = "JOIN".id'
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1)
+        text_values = [v for k, v in tokens if k == "TEXT"]
+        self.assertTrue(any('"JOIN"' in t for t in text_values),
+                        "The quoted identifier should appear in a TEXT token")
+
+    def test_keyword_inside_brackets_ignored(self):
+        """A bracket-quoted identifier containing a SQL keyword must not produce an
+        extra CONDKW token; the bracketed string is captured as part of a TEXT segment."""
+        body = "t1 JOIN [ON] ON t1.id = [ON].id"
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1)
+        text_values = [v for k, v in tokens if k == "TEXT"]
+        self.assertTrue(any("[ON]" in t for t in text_values),
+                        "The bracketed identifier should appear in a TEXT token")
+
+    def test_keyword_inside_backticks_ignored(self):
+        """A backtick-quoted identifier containing a SQL keyword must not produce an
+        extra CONDKW token; the backtick string is captured as part of a TEXT segment."""
+        body = "t1 JOIN `ON` ON t1.id = `ON`.id"
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1)
+        text_values = [v for k, v in tokens if k == "TEXT"]
+        self.assertTrue(any("`ON`" in t for t in text_values),
+                        "The backtick-quoted identifier should appear in a TEXT token")
+
+    def test_using_keyword_tokenized_as_condkw(self):
+        """USING is tokenized as a CONDKW, not ignored."""
+        body = "t1 JOIN t2 USING (id)"
+        tokens = _tokenize_from_clause_body(body)
+        cond_values = [v for k, v in tokens if k == "CONDKW"]
+        self.assertEqual(cond_values, ["USING"])
 
 
 class TestClauseEndIndex(unittest.TestCase):
@@ -267,6 +410,7 @@ class TestStripSqlComments(unittest.TestCase):
         sql = "SELECT /**/ * FROM my_table;"
         expected = "SELECT  * FROM my_table;"
         self.assertEqual(strip_sql_comments(sql), expected)
+
     def test_comment_like_sequences_in_strings(self):
         """Ensures comment-like sequences in string literals are not stripped."""
         with self.subTest("Line comment in string"):
