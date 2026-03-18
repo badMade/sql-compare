@@ -157,7 +157,7 @@ class TestCanonicalizeJoins(unittest.TestCase):
         self.assertEqual(result.upper().count("JOIN"), 3)
 
 
-class TestTokenizeFromClauseBody(unittest.TestCase):
+class TestTokenizeFromClauseBodyEdgeCases(unittest.TestCase):
     """Unit tests for _tokenize_from_clause_body, focusing on edge cases where
     SQL keywords appear inside quoted identifiers or parenthesized subqueries."""
 
