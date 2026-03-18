@@ -485,6 +485,119 @@ class TestUppercaseOutsideQuotes(unittest.TestCase):
         self.assertEqual(result, """SELECT 'he said "hi"' FROM T""")
 
 
+class TestSplitTopLevel(unittest.TestCase):
+    def test_split_with_quotes_and_parens(self):
+        from sql_compare import split_top_level
+        # Test case 1: Separator inside single quotes
+        s = "col1, 'value, with, comma', col2"
+        sep = ","
+        expected = ["col1", "'value, with, comma'", "col2"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 2: Separator inside double quotes with escaped quote
+        s = 'col1, "value, with ""comma""", col2'
+        sep = ","
+        expected = ["col1", '"value, with ""comma"""', "col2"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 3: Separator inside parentheses
+        s = "func(arg1, arg2), col2"
+        sep = ","
+        expected = ["func(arg1, arg2)", "col2"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 4: Separator inside brackets
+        s = "[schema.table, column], col2"
+        sep = ","
+        expected = ["[schema.table, column]", "col2"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 5: Separator inside backticks
+        s = "`table.column, with, comma`, col2"
+        sep = ","
+        expected = ["`table.column, with, comma`", "col2"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 6: Nested structures
+        s = "a, (b, 'c,d'), e"
+        sep = ","
+        expected = ["a", "(b, 'c,d')", "e"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 7: Empty parts should be filtered out
+        s = "a,,b"
+        sep = ","
+        expected = ["a", "b"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 8: Leading/trailing separators
+        s = ",a,b,"
+        sep = ","
+        expected = ["a", "b"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 9: Separator at the beginning of a quoted string (should not split)
+        s = "'foo,bar'"
+        sep = ","
+        expected = ["'foo,bar'"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 10: Separator at the end of a quoted string (should not split)
+        s = "'foo,bar'"
+        sep = ","
+        expected = ["'foo,bar'"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 11: Empty string
+        s = ""
+        sep = ","
+        expected = []
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 12: String without separator
+        s = "foobar"
+        sep = ","
+        expected = ["foobar"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 13: Multiple separators
+        s = "a AND b OR c"
+        sep = " AND "
+        expected = ["a", "b OR c"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 14: Separator with leading/trailing spaces
+        s = "a , b"
+        sep = ","
+        expected = ["a", "b"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 15: Separator with different case (if case-sensitive split is expected)
+        # Assuming split_top_level is case-sensitive for the separator
+        s = "a and b"
+        sep = " AND "
+        expected = ["a and b"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 16: Separator that is a substring of another word
+        s = "banana, apple"
+        sep = "an"
+        expected = ["b", "a, apple"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 17: Complex SQL-like example
+        s = "SELECT a, b, (SELECT c FROM d WHERE e = 'f,g'), h FROM i WHERE j = k AND l = 'm''n'"
+        sep = ","
+        expected = ["SELECT a", "b", "(SELECT c FROM d WHERE e = 'f,g')", "h FROM i WHERE j = k AND l = 'm''n'"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+        # Test case 18: Another complex SQL-like example with AND
+        s = "col1 = 1 AND col2 = 'val AND ues' AND (col3 = 3 OR col4 = 4)"
+        sep = " AND "
+        expected = ["col1 = 1", "col2 = 'val AND ues'", "(col3 = 3 OR col4 = 4)"]
+        self.assertEqual(split_top_level(s, sep), expected)
+
+
 class TestTopLevelFindKw(unittest.TestCase):
     def test_finds_top_level_keyword(self):
         """Should find a keyword at the top level."""
