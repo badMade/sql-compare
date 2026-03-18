@@ -413,26 +413,36 @@ if __name__ == '__main__':
 
 class TestSplitTopLevel(unittest.TestCase):
     def test_basic_split(self):
+        self.assertEqual(split_top_level("A, B, C", ","), ["A", "B", "C"])
+        self.assertEqual(split_top_level("A AND B AND C", " AND "), ["A", "B", "C"])
+
+    def test_ignore_inside_quotes(self):
         test_cases = [
-            ("comma separator", "A, B, C", ",", ["A", "B", "C"]),
-            ("word separator", "A AND B AND C", " AND ", ["A", "B", "C"]),
+            ("single quotes", "'A, B', C", ",", ["'A, B'", "C"]),
+            ("double quotes", '"A, B", C', ",", ['"A, B"', "C"]),
+            ("separator in string", "A = 'test AND case' AND B = 1", " AND ", ["A = 'test AND case'", "B = 1"]),
         ]
         for description, sql, sep, expected in test_cases:
             with self.subTest(description=description):
                 self.assertEqual(split_top_level(sql, sep), expected)
 
-    def test_ignore_inside_quotes(self):
-        self.assertEqual(split_top_level("'A, B', C", ","), ["'A, B'", "C"])
-        self.assertEqual(split_top_level('"A, B", C', ","), ['"A, B"', "C"])
-        self.assertEqual(split_top_level("A = 'test AND case' AND B = 1", " AND "), ["A = 'test AND case'", "B = 1"])
-
     def test_ignore_inside_brackets_backticks(self):
-        self.assertEqual(split_top_level("[A, B], C", ","), ["[A, B]", "C"])
-        self.assertEqual(split_top_level("`A, B`, C", ","), ["`A, B`", "C"])
+        test_cases = [
+            ("brackets", "[A, B], C", ",", ["[A, B]", "C"]),
+            ("backticks", "`A, B`, C", ",", ["`A, B`", "C"]),
+        ]
+        for description, sql, sep, expected in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(split_top_level(sql, sep), expected)
 
     def test_ignore_inside_parentheses(self):
-        self.assertEqual(split_top_level("A(1, 2), B", ","), ["A(1, 2)", "B"])
-        self.assertEqual(split_top_level("(A AND B) AND C", " AND "), ["(A AND B)", "C"])
+        test_cases = [
+            ("function call", "A(1, 2), B", ",", ["A(1, 2)", "B"]),
+            ("grouped expression", "(A AND B) AND C", " AND ", ["(A AND B)", "C"]),
+        ]
+        for description, sql, sep, expected in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(split_top_level(sql, sep), expected)
 
     def test_empty_and_separator_only(self):
         self.assertEqual(split_top_level("", ","), [])
