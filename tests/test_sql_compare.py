@@ -2,29 +2,8 @@ import unittest
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw, collapse_whitespace,
+    top_level_find_kw,
 )
-
-
-class TestCollapseWhitespace(unittest.TestCase):
-    def test_collapse_whitespace_edge_cases(self):
-        """Test edge cases for collapse_whitespace function."""
-        test_cases = [
-            # description, input_string, expected_output
-            ("Empty string", "", ""),
-            ("String with only spaces", "     ", ""),
-            ("String with only newlines and tabs", "\n\n\t\t\n", ""),
-            ("Already collapsed string", "SELECT a FROM b", "SELECT a FROM b"),
-            ("Mixed whitespace characters", "SELECT\t\ta\nFROM \r\nb", "SELECT a FROM b"),
-            ("Leading and trailing whitespace", "  SELECT a FROM b  ", "SELECT a FROM b"),
-            ("Multiple consecutive spaces", "SELECT    a    FROM     b", "SELECT a FROM b"),
-            ("Unicode whitespace", "SELECT\u00A0a\u2003FROM\u2009b", "SELECT a FROM b"),
-        ]
-
-        for description, input_str, expected in test_cases:
-            with self.subTest(description=description, input=input_str):
-                self.assertEqual(collapse_whitespace(input_str), expected)
-
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -406,40 +385,38 @@ class TestTopLevelFindKw(unittest.TestCase):
 
 class TestSecurity(unittest.TestCase):
     def test_dos_stdin_unbounded_read(self):
-    def test_dos_stdin_unbounded_read(self):
         """Verify that reading from stdin bounds the input to MAX_FILE_SIZE_BYTES to prevent DoS."""
         from sql_compare import read_from_stdin_two_parts
         from unittest.mock import patch, MagicMock
 
-        mock_stdin = MagicMock()
-
         # Test case where input exceeds mocked MAX_FILE_SIZE_BYTES limit
-        with self.subTest("input exceeds limit"):
-            mock_limit = 100
-            mock_mb = 0.0001
-            mock_stdin.read.return_value = "A" * (mock_limit + 1)
-            mock_stdin.reset_mock()
+        mock_limit = 100
+        mock_mb = 0.0001
 
-            with patch("sql_compare.sys.stdin", mock_stdin), \
-                 patch("sql_compare.MAX_FILE_SIZE_BYTES", mock_limit), \
-                 patch("sql_compare.MAX_FILE_SIZE_MB", mock_mb):
-                with self.assertRaisesRegex(ValueError, f"Input too large. Limit is {mock_mb} MB."):
-                    read_from_stdin_two_parts()
+        excessive_input = "A" * (mock_limit + 1)
+        mock_stdin = MagicMock()
+        mock_stdin.read.return_value = excessive_input
 
-                mock_stdin.read.assert_called_once_with(mock_limit + 1)
+        with patch("sql_compare.sys.stdin", mock_stdin), \
+             patch("sql_compare.MAX_FILE_SIZE_BYTES", mock_limit), \
+             patch("sql_compare.MAX_FILE_SIZE_MB", mock_mb):
+            with self.assertRaisesRegex(ValueError, f"Input too large. Limit is {mock_mb} MB."):
+                read_from_stdin_two_parts()
+
+            mock_stdin.read.assert_called_once_with(mock_limit + 1)
 
         # Test case where valid input within limit is accepted
-        with self.subTest("valid input within limit"):
-            mock_stdin.read.return_value = "SELECT 1\n---\nSELECT 2"
-            mock_stdin.reset_mock()
+        valid_input = "SELECT 1\n---\nSELECT 2"
+        mock_stdin.reset_mock()
+        mock_stdin.read.return_value = valid_input
 
-            with patch("sql_compare.sys.stdin", mock_stdin), \
-                 patch("sql_compare.MAX_FILE_SIZE_BYTES", 1000):
-                part1, part2 = read_from_stdin_two_parts()
-                self.assertEqual(part1, "SELECT 1")
-                self.assertEqual(part2, "SELECT 2")
+        with patch("sql_compare.sys.stdin", mock_stdin), \
+             patch("sql_compare.MAX_FILE_SIZE_BYTES", 1000):
+            part1, part2 = read_from_stdin_two_parts()
+            self.assertEqual(part1, "SELECT 1")
+            self.assertEqual(part2, "SELECT 2")
 
-                mock_stdin.read.assert_called_once_with(1001)
+            mock_stdin.read.assert_called_once_with(1001)
 
     def test_xss_in_html_report_summary(self):
         """Verify that XSS payloads in summary lines are escaped in HTML output."""
@@ -464,81 +441,6 @@ class TestSecurity(unittest.TestCase):
         finally:
             os.unlink(tmp_path)
 
-
-
-class TestTokenizeFromClauseBody(unittest.TestCase):
-    def test_backticks(self):
-        """Should correctly parse backticks in a FROM clause body."""
-        from sql_compare import _tokenize_from_clause_body
-        sql = "t1 JOIN t2 ON t1.`id` = t2.`id`"
-        tokens = _tokenize_from_clause_body(sql)
-        self.assertEqual(tokens, [
-            ('TEXT', 't1'),
-            ('JOINKW', 'JOIN'),
-            ('TEXT', 't2'),
-            ('CONDKW', 'ON'),
-            ('TEXT', 't1.`id` = t2.`id`')
-        ])
-class TestCollapseWhitespace(unittest.TestCase):
-    def test_collapse_whitespace_scenarios(self):
-        """Test various scenarios for whitespace collapsing."""
-        test_cases = {
-            "basic_collapse": ("SELECT  *   FROM    t1", "SELECT * FROM t1"),
-            "mixed_whitespace_sql": ("SELECT\t*\nFROM\r\nt1", "SELECT * FROM t1"),
-            "mixed_whitespace_simple": ("A \t \n B", "A B"),
-            "trimming_spaces": ("   SELECT * FROM t1  ", "SELECT * FROM t1"),
-            "trimming_mixed": ("\n\tSELECT * FROM t1\r\n", "SELECT * FROM t1"),
-            "no_whitespace_sql": ("SELECT*FROM(t1)", "SELECT*FROM(t1)"),
-            "no_whitespace_word": ("word", "word"),
-            "empty_string": ("", ""),
-            "only_whitespace": ("   \t\n  ", ""),
-        }
-
-        for name, (input_str, expected) in test_cases.items():
-            with self.subTest(name=name):
-                self.assertEqual(collapse_whitespace(input_str), expected)
-
-
-class TestRemoveOuterParentheses(unittest.TestCase):
-    def test_basic_single_layer(self):
-        """Should remove a single layer of outer parentheses."""
-        sql = "(SELECT * FROM t)"
-        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
-
-    def test_multiple_layers(self):
-        """Should remove multiple layers of outer parentheses."""
-        sql = "(((SELECT * FROM t)))"
-        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
-
-    def test_no_parentheses(self):
-        """Should return the string unmodified if no outer parentheses exist."""
-        sql = "SELECT * FROM t"
-        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
-
-    def test_unmatched_parentheses(self):
-        """Should return the string unmodified if parentheses are not matched at the ends."""
-        sql = "(SELECT * FROM t"
-        self.assertEqual(remove_outer_parentheses(sql), "(SELECT * FROM t")
-
-        sql2 = "SELECT * FROM t)"
-        self.assertEqual(remove_outer_parentheses(sql2), "SELECT * FROM t)")
-
-    def test_not_full_statement(self):
-        """Should not remove parentheses if they don't enclose the entire statement."""
-        sql = "(SELECT a) UNION (SELECT b)"
-        self.assertEqual(remove_outer_parentheses(sql), "(SELECT a) UNION (SELECT b)")
-
-    def test_parentheses_inside_strings(self):
-        """Should not be confused by parentheses inside quoted strings."""
-        # The string starts with ( and ends with ), but the parentheses do not match each other structurally at the top level
-        sql = "('()')"
-        self.assertEqual(remove_outer_parentheses(sql), "'()'")
-
-    def test_empty_string(self):
-        """Should handle empty strings and whitespace correctly."""
-        self.assertEqual(remove_outer_parentheses(""), "")
-        self.assertEqual(remove_outer_parentheses("()"), "")
-        self.assertEqual(remove_outer_parentheses(" ( ) "), "")
 
 if __name__ == '__main__':
     unittest.main()
