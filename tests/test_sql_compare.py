@@ -408,9 +408,6 @@ class TestSecurity(unittest.TestCase):
             os.unlink(tmp_path)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
 class TestSplitTopLevel(unittest.TestCase):
     def test_basic_split(self):
         self.assertEqual(split_top_level("A, B, C", ","), ["A", "B", "C"])
@@ -470,3 +467,6 @@ class TestSplitTopLevel(unittest.TestCase):
         # So we should verify case-sensitive behavior here.
         self.assertEqual(split_top_level("A and B AND C", " AND "), ["A and B", "C"])
         self.assertEqual(split_top_level("A AND B AND C", " AND "), ["A", "B", "C"])
+
+if __name__ == '__main__':
+    unittest.main()
