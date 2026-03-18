@@ -82,54 +82,31 @@ def collapse_whitespace(s: str) -> str:
     return WHITESPACE_REGEX.sub(" ", s).strip()
 
 
+QUOTED_STRING_REGEX = re.compile(
+    r"""
+    '(?:''|[^'])*(?:'|$)      # Single-quoted strings, handles '' escape and unclosed
+    | "(?:""|[^"])*(?:"|$)      # Double-quoted strings, handles "" escape and unclosed
+    | \[[^\]]*(?:\]|$)          # MS SQL-style [bracketed] identifiers, handles unclosed
+    | `[^`]*(?:`|$)            # MySQL-style `backticked` identifiers, handles unclosed
+    """,
+    re.VERBOSE
+)
+
 def uppercase_outside_quotes(s: str) -> str:
     """
     Uppercase characters outside of quoted regions:
       single quotes '...'; double quotes "..."; [brackets]; `backticks`
     """
     out = []
-    i = 0
-    mode = None  # 'single', 'double', 'bracket', 'backtick'
-    while i < len(s):
-        ch = s[i]
-        if mode is None:
-            if ch == "'":
-                mode = 'single'
-                out.append(ch)
-            elif ch == '"':
-                mode = 'double'
-                out.append(ch)
-            elif ch == '[':
-                mode = 'bracket'
-                out.append(ch)
-            elif ch == '`':
-                mode = 'backtick'
-                out.append(ch)
-            else:
-                out.append(ch.upper())
-        elif mode == 'single':
-            out.append(ch)
-            if ch == "'":
-                if i + 1 < len(s) and s[i + 1] == "'":
-                    out.append(s[i + 1]); i += 1
-                else:
-                    mode = None
-        elif mode == 'double':
-            out.append(ch)
-            if ch == '"':
-                if i + 1 < len(s) and s[i + 1] == '"':
-                    out.append(s[i + 1]); i += 1
-                else:
-                    mode = None
-        elif mode == 'bracket':
-            out.append(ch)
-            if ch == ']':
-                mode = None
-        elif mode == 'backtick':
-            out.append(ch)
-            if ch == '`':
-                mode = None
-        i += 1
+    prev = 0
+    for m in QUOTED_STRING_REGEX.finditer(s):
+        start, end = m.span()
+        if start > prev:
+            out.append(s[prev:start].upper())
+        out.append(m.group(0))
+        prev = end
+    if prev < len(s):
+        out.append(s[prev:].upper())
     return "".join(out)
 
 
@@ -413,7 +390,6 @@ def _tokenize_from_clause_body(body: str) -> list:
                 if i + 1 < n and body[i + 1] == '"': buf.append(ch); i += 1
                 else: mode = None
             elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
             elif mode == 'backtick' and ch == '`': mode = None
         buf.append(ch)
         i += 1
@@ -995,7 +971,38 @@ class SQLCompareGUI:
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
-        self.txt.insert("1.0", "Select files and click Compare to see results here.")
+
+        def _readonly_handler(event):
+            CTRL_MASK = 0x0004   # Control on X11/Windows
+            MOD1_MASK = 0x0008   # Command on macOS
+            MODIFIER_KEYSYMS = {'Control_L', 'Control_R', 'Shift_L', 'Shift_R',
+                                'Alt_L', 'Alt_R', 'Super_L', 'Super_R',
+                                'Meta_L', 'Meta_R', 'Caps_Lock', 'Num_Lock'}
+            NAV_KEYSYMS = {'Up', 'Down', 'Left', 'Right', 'Prior', 'Next',
+                           'Home', 'End'}
+            if event.keysym in MODIFIER_KEYSYMS:
+                return None
+            if event.keysym in NAV_KEYSYMS:
+                return None
+            if event.keysym.startswith('F') and event.keysym[1:].isdigit():
+                return None
+            if event.keysym.lower() in ('c', 'a') and (event.state & (CTRL_MASK | MOD1_MASK)):
+                return None
+            return "break"
+
+        def _focus_next(event):
+            event.widget.tk_focusNext().focus_set()
+            return "break"
+
+        def _focus_prev(event):
+            event.widget.tk_focusPrev().focus_set()
+            return "break"
+
+        self.txt.bind("<Key>", _readonly_handler)
+        self.txt.bind("<Tab>", _focus_next)
+        self.txt.bind("<ISO_Left_Tab>", _focus_prev)
+        self.txt.tag_configure("empty", foreground="gray", justify="center")
+        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
 
     def _toggle_join_options(self):
         # Enable/disable dependent flags based on global join toggle
@@ -1018,7 +1025,7 @@ class SQLCompareGUI:
 
     def clear_output(self):
         self.txt.delete("1.0", "end")
-        self.txt.insert("1.0", "Select files and click Compare to see results here.")
+        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
         self.btn_copy.state(['disabled'])
         self.btn_clear.state(['disabled'])
         self.btn_save.state(['disabled'])
