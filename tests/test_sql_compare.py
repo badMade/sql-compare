@@ -429,7 +429,7 @@ class TestCanonicalizeSelectList(unittest.TestCase):
         self.assertEqual(canonicalize_select_list(sql), expected)
 
     def test_missing_select_or_from(self):
-        """Missing SELECT or FROM should return the original string."""
+        """Missing SELECT or FROM should not trigger select-list reordering (only whitespace normalization may occur)."""
         for sql in ["UPDATE t SET a=1, b=2", "SELECT a, b"]:
             with self.subTest(sql=sql):
                 self.assertEqual(canonicalize_select_list(sql), sql)
