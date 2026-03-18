@@ -340,8 +340,7 @@ def ws_only_normalize(sql: str) -> str:
     return remove_trailing_semicolon(collapse_whitespace(sql))
 
 
-def canonicalize_select_list(sql: str) -> str:
-    s = collapse_whitespace(sql)
+def canonicalize_select_list(s: str) -> str:
     sel_i = top_level_find_kw(s, "SELECT", 0)
     if sel_i == -1: return s
     from_i = top_level_find_kw(s, "FROM", sel_i + 6)
@@ -354,15 +353,14 @@ def canonicalize_select_list(sql: str) -> str:
     return collapse_whitespace(s)
 
 
-def canonicalize_where_and(sql: str) -> str:
-    s = collapse_whitespace(sql)
+def canonicalize_where_and(s: str) -> str:
     where_i = top_level_find_kw(s, "WHERE", 0)
     if where_i == -1: return s
     end_i = clause_end_index(s, where_i + 5)
     body = s[where_i + 5:end_i].strip()
     terms = split_top_level(body, " AND ")
     if len(terms) > 1:
-        terms_sorted = sorted([collapse_whitespace(t) for t in terms], key=lambda z: z.upper())
+        terms_sorted = sorted([t.strip() for t in terms], key=lambda z: z.upper())
         new_body = " AND ".join(terms_sorted)
         s = s[:where_i + 5] + " " + new_body + " " + s[end_i:]
     return collapse_whitespace(s)
@@ -378,7 +376,7 @@ def _tokenize_from_clause_body(body: str) -> list:
     def flush_buf():
         nonlocal buf
         if buf:
-            tokens.append(("TEXT", collapse_whitespace("".join(buf)).strip()))
+            tokens.append(("TEXT", "".join(buf).strip()))
             buf = []
 
     while i < n:
@@ -396,7 +394,7 @@ def _tokenize_from_clause_body(body: str) -> list:
                 m = re.match(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", body[i:], flags=re.I)
                 if m:
                     flush_buf()
-                    tokens.append(("JOINKW", collapse_whitespace(m.group(1)).upper()))
+                    tokens.append(("JOINKW", " ".join(m.group(1).upper().split())))
                     i += m.end()
                     continue
                 m2 = re.match(r"\b(ON|USING)\b", body[i:], flags=re.I)
@@ -474,9 +472,9 @@ def _extract_join_segments(tokens: list, start_idx: int) -> list:
 
         segments.append({
             "type": _clean_join_type(join_kw),
-            "table": collapse_whitespace(table_text),
+            "table": table_text.strip(),
             "cond_kw": cond_kw,
-            "cond": collapse_whitespace(cond_text),
+            "cond": cond_text.strip(),
         })
     return segments
 
@@ -494,7 +492,7 @@ def _parse_from_clause_body(body: str) -> tuple:
     tokens = _tokenize_from_clause_body(body)
     base, idx = _extract_base_table(tokens)
     segments = _extract_join_segments(tokens, idx)
-    return collapse_whitespace(base), segments
+    return base.strip(), segments
 
 
 def _rebuild_from_body(base: str, segments: list) -> str:
@@ -509,7 +507,7 @@ def _rebuild_from_body(base: str, segments: list) -> str:
     return " ".join(parts)
 
 
-def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: bool = False) -> str:
+def canonicalize_joins(s: str, allow_full_outer: bool = False, allow_left: bool = False) -> str:
     """
     Canonicalize top-level FROM JOIN chains by sorting contiguous runs of:
       - INNER/CROSS/NATURAL joins (always when join reordering is enabled)
@@ -517,7 +515,6 @@ def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: boo
       - LEFT joins (only when allow_left=True)
     RIGHT joins are preserved (not commutative). FULL/LEFT also preserved unless explicitly allowed.
     """
-    s = collapse_whitespace(sql)
     from_i = top_level_find_kw(s, "FROM", 0)
     if from_i == -1:
         return s
