@@ -345,55 +345,50 @@ def canonicalize_where_and(sql: str) -> str:
     return collapse_whitespace(s)
 
 
-def _tokenize_from_clause_body(body: str) -> list:
-    i = 0
-    n = len(body)
-    mode = None
-    level = 0
-    tokens = []
-    buf = []
-    def flush_buf():
-        nonlocal buf
-        if buf:
-            tokens.append(("TEXT", collapse_whitespace("".join(buf)).strip()))
-            buf = []
+FROM_BODY_TOKENIZER_RE = re.compile(
+    r"""
+    (
+        '(?:''|[^'])*'?            # single quotes (closed or unclosed)
+      | "(?:""|[^"])*"?            # double quotes (closed or unclosed)
+      | \[[^\]]*\]?                # brackets (closed or unclosed)
+      | `[^`]*`?                   # backticks (closed or unclosed)
+    )
+    | (\()                        # Open paren (group 2)
+    | (\))                        # Close paren (group 3)
+    | \b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b  # JOINKW (group 4)
+    | \b(ON|USING)\b              # CONDKW (group 5)
+    """,
+    re.VERBOSE | re.IGNORECASE
+)
 
-    while i < n:
-        ch = body[i]
-        if mode is None:
-            if ch == "'": mode = 'single'
-            elif ch == '"': mode = 'double'
-            elif ch == '[': mode = 'bracket'
-            elif ch == '`': mode = 'backtick'
-            elif ch == '(':
-                level += 1
-            elif ch == ')':
-                level = max(0, level - 1)
-            if level == 0:
-                m = re.match(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", body[i:], flags=re.I)
-                if m:
-                    flush_buf()
-                    tokens.append(("JOINKW", collapse_whitespace(m.group(1)).upper()))
-                    i += m.end()
-                    continue
-                m2 = re.match(r"\b(ON|USING)\b", body[i:], flags=re.I)
-                if m2:
-                    flush_buf()
-                    tokens.append(("CONDKW", m2.group(1).upper()))
-                    i += m2.end()
-                    continue
-        else:
-            if mode == 'single' and ch == "'":
-                if i + 1 < n and body[i + 1] == "'": buf.append(ch); i += 1
-                else: mode = None
-            elif mode == 'double' and ch == '"':
-                if i + 1 < n and body[i + 1] == '"': buf.append(ch); i += 1
-                else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
-        buf.append(ch)
-        i += 1
-    flush_buf()
+def _tokenize_from_clause_body(body: str) -> list:
+    """Tokenize FROM body efficiently without O(N^2) loops using regex."""
+    tokens = []
+    level = 0
+    prev = 0
+
+    def add_text(start, end):
+        text = collapse_whitespace(body[start:end]).strip()
+        if text:
+            tokens.append(("TEXT", text))
+
+    for m in FROM_BODY_TOKENIZER_RE.finditer(body):
+        if m.group(1): # quoted string
+            pass
+        elif m.group(2): # (
+            level += 1
+        elif m.group(3): # )
+            level = max(0, level - 1)
+        elif m.group(4) and level == 0: # JOINKW
+            add_text(prev, m.start())
+            tokens.append(("JOINKW", collapse_whitespace(m.group(4)).upper()))
+            prev = m.end()
+        elif m.group(5) and level == 0: # CONDKW
+            add_text(prev, m.start())
+            tokens.append(("CONDKW", m.group(5).upper()))
+            prev = m.end()
+
+    add_text(prev, len(body))
     return tokens
 
 
