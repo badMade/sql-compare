@@ -93,54 +93,31 @@ class TestGUIEmptyState(unittest.TestCase):
         # Text content must remain unchanged after copy
         self.assertEqual(self.gui.txt.get("1.0", "end-1c"), content)
 
-    def test_modifier_only_keys_not_blocked(self) -> None:
-        """Pressing modifier keys alone must not break the widget."""
+    def test_allowed_keys_not_blocked(self) -> None:
+        """Keys allowed by the readonly handler must pass through without modifying text."""
         content = "Hello World"
         self.gui.txt.delete("1.0", "end")
         self.gui.txt.insert("1.0", content)
         self.gui.txt.focus_set()
         self.root.update_idletasks()
 
-        for keysym in ("Control_L", "Shift_L", "Alt_L"):
-            self.gui.txt.event_generate("<KeyPress>", keysym=keysym)
-            self.root.update_idletasks()
-            self.assertEqual(
-                self.gui.txt.get("1.0", "end-1c"),
-                content,
-                f"Text changed after modifier key {keysym}",
-            )
+        test_cases = {
+            "modifier Control_L": ("<KeyPress>", {"keysym": "Control_L"}),
+            "modifier Shift_L": ("<KeyPress>", {"keysym": "Shift_L"}),
+            "modifier Alt_L": ("<KeyPress>", {"keysym": "Alt_L"}),
+            "Tab key": ("<Tab>", {}),
+            "Function key F5": ("<F5>", {}),
+        }
 
-    def test_tab_key_not_blocked(self) -> None:
-        """Tab key must pass through for focus traversal."""
-        content = "Hello World"
-        self.gui.txt.delete("1.0", "end")
-        self.gui.txt.insert("1.0", content)
-        self.gui.txt.focus_set()
-        self.root.update_idletasks()
-
-        # Store the initial focus to ensure it changes
-        initial_focus = self.root.focus_get()
-
-        self.gui.txt.event_generate("<Tab>")
-        self.root.update_idletasks()
-
-        # Assert that focus has moved away from the Text widget
-        self.assertNotEqual(self.root.focus_get(), initial_focus, "Focus did not move after Tab key")
-        # Text content must be unchanged (Tab should not insert a tab character)
-        self.assertEqual(self.gui.txt.get("1.0", "end-1c"), content)
-
-    def test_function_keys_not_blocked(self) -> None:
-        """Function keys must pass through."""
-        content = "Hello World"
-        self.gui.txt.delete("1.0", "end")
-        self.gui.txt.insert("1.0", content)
-        self.gui.txt.focus_set()
-        self.root.update_idletasks()
-
-        self.gui.txt.event_generate("<F5>")
-        self.root.update_idletasks()
-
-        self.assertEqual(self.gui.txt.get("1.0", "end-1c"), content)
+        for desc, (event_string, options) in test_cases.items():
+            with self.subTest(desc=desc):
+                self.gui.txt.event_generate(event_string, **options)
+                self.root.update_idletasks()
+                self.assertEqual(
+                    self.gui.txt.get("1.0", "end-1c"),
+                    content,
+                    f"Text content changed after {desc} event",
+                )
 
     def test_initial_empty_state(self) -> None:
         # Assert tag exists and has correct config
