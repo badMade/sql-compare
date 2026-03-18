@@ -118,9 +118,14 @@ class TestGUIEmptyState(unittest.TestCase):
         self.gui.txt.focus_set()
         self.root.update_idletasks()
 
+        # Store the initial focus to ensure it changes
+        initial_focus = self.root.focus_get()
+
         self.gui.txt.event_generate("<Tab>")
         self.root.update_idletasks()
 
+        # Assert that focus has moved away from the Text widget
+        self.assertNotEqual(self.root.focus_get(), initial_focus, "Focus did not move after Tab key")
         # Text content must be unchanged (Tab should not insert a tab character)
         self.assertEqual(self.gui.txt.get("1.0", "end-1c"), content)
 
