@@ -424,11 +424,10 @@ class TestBuildDifferenceSummary(unittest.TestCase):
         )
         self.assertEqual(summary, ["No structural differences detected beyond normalization."])
 
-    def test_select_list_differs_missing(self):
         norm_a = "SELECT id, name FROM users"
         norm_b = "SELECT id FROM users"
-        tokens_a = ["SELECT", " ", "id", ",", " ", "name", " ", "FROM", " ", "users"]
-        tokens_b = ["SELECT", " ", "id", " ", "FROM", " ", "users"]
+        tokens_a = tokenize(norm_a)
+        tokens_b = tokenize(norm_b)
 
         summary = build_difference_summary(
             norm_a, norm_b, "", "", tokens_a, tokens_b,
