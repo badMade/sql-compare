@@ -413,8 +413,13 @@ if __name__ == '__main__':
 
 class TestSplitTopLevel(unittest.TestCase):
     def test_basic_split(self):
-        self.assertEqual(split_top_level("A, B, C", ","), ["A", "B", "C"])
-        self.assertEqual(split_top_level("A AND B AND C", " AND "), ["A", "B", "C"])
+        test_cases = [
+            ("comma separator", "A, B, C", ",", ["A", "B", "C"]),
+            ("word separator", "A AND B AND C", " AND ", ["A", "B", "C"]),
+        ]
+        for description, sql, sep, expected in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(split_top_level(sql, sep), expected)
 
     def test_ignore_inside_quotes(self):
         self.assertEqual(split_top_level("'A, B', C", ","), ["'A, B'", "C"])
