@@ -430,8 +430,9 @@ class TestCanonicalizeSelectList(unittest.TestCase):
 
     def test_missing_select_or_from(self):
         """Missing SELECT or FROM should return the original string."""
-        self.assertEqual(canonicalize_select_list("UPDATE t SET a=1, b=2"), "UPDATE t SET a=1, b=2")
-        self.assertEqual(canonicalize_select_list("SELECT a, b"), "SELECT a, b")
+        for sql in ["UPDATE t SET a=1, b=2", "SELECT a, b"]:
+            with self.subTest(sql=sql):
+                self.assertEqual(canonicalize_select_list(sql), sql)
 
     def test_nested_commas(self):
         """Commas inside strings, functions, and subqueries should not split items."""
