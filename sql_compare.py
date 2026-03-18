@@ -995,7 +995,7 @@ class SQLCompareGUI:
                                 'Alt_L', 'Alt_R', 'Super_L', 'Super_R',
                                 'Meta_L', 'Meta_R', 'Caps_Lock', 'Num_Lock'}
             NAV_KEYSYMS = {'Up', 'Down', 'Left', 'Right', 'Prior', 'Next',
-                           'Home', 'End', 'Tab', 'ISO_Left_Tab'}
+                           'Home', 'End'}
             if event.keysym in MODIFIER_KEYSYMS:
                 return None
             if event.keysym in NAV_KEYSYMS:
@@ -1006,7 +1006,17 @@ class SQLCompareGUI:
                 return None
             return "break"
 
+        def _focus_next(event):
+            event.widget.tk_focusNext().focus_set()
+            return "break"
+
+        def _focus_prev(event):
+            event.widget.tk_focusPrev().focus_set()
+            return "break"
+
         self.txt.bind("<Key>", _readonly_handler)
+        self.txt.bind("<Tab>", _focus_next)
+        self.txt.bind("<ISO_Left_Tab>", _focus_prev)
         self.txt.tag_configure("empty", foreground="gray", justify="center")
         self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
 
