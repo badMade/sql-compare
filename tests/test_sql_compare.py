@@ -400,8 +400,9 @@ class TestSecurity(unittest.TestCase):
         with patch("sql_compare.sys.stdin", mock_stdin), \
              patch("sql_compare.MAX_FILE_SIZE_BYTES", mock_limit), \
              patch("sql_compare.MAX_FILE_SIZE_MB", mock_mb):
-            with self.assertRaisesRegex(ValueError, f"Input too large. Limit is {mock_mb} MB."):
+            with self.assertRaises(ValueError) as cm:
                 read_from_stdin_two_parts()
+            self.assertEqual(str(cm.exception), f"Input too large. Limit is {mock_mb} MB.")
 
             mock_stdin.read.assert_called_once_with(mock_limit + 1)
 
