@@ -761,10 +761,13 @@ def parse_args(argv):
 
 
 def read_from_stdin_two_parts():
-    # Prevent DoS from unbounded piped input
-    raw = sys.stdin.read(MAX_FILE_SIZE_BYTES + 1)
-    if len(raw) > MAX_FILE_SIZE_BYTES:
+    # Prevent DoS from unbounded piped input: enforce limit on raw bytes
+    raw_bytes = sys.stdin.buffer.read(MAX_FILE_SIZE_BYTES + 1)
+    if len(raw_bytes) > MAX_FILE_SIZE_BYTES:
         raise ValueError(f"Input too large. Limit is {MAX_FILE_SIZE_MB} MB.")
+
+    # Decode using UTF-8 with a tolerant error policy, consistent with file reads
+    raw = raw_bytes.decode("utf-8", errors="replace")
 
     parts = re.split(r"^\s*---\s*$", raw, flags=re.M)
     if len(parts) != 2:
