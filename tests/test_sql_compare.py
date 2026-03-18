@@ -450,8 +450,13 @@ class TestSplitTopLevel(unittest.TestCase):
         self.assertEqual(split_top_level("   ", ","), [])
 
     def test_consecutive_separators(self):
-        self.assertEqual(split_top_level("A,,B", ","), ["A", "B"])
-        self.assertEqual(split_top_level("A AND  AND B", " AND "), ["A", "B"])
+        test_cases = [
+            ("consecutive commas", "A,,B", ",", ["A", "B"]),
+            ("consecutive word separators", "A AND  AND B", " AND ", ["A", "B"]),
+        ]
+        for description, sql, sep, expected in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(split_top_level(sql, sep), expected)
 
     def test_unbalanced_modes(self):
         # Since the loop ends when the string ends, whatever is in the buffer gets appended
