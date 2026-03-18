@@ -207,6 +207,19 @@ def tokenize(sql: str):
 
 def split_top_level(s: str, sep: str) -> list:
     """Split by sep at top-level (not inside quotes/parentheses/brackets/backticks)."""
+    if not sep:
+        raise ValueError("split_top_level: 'sep' must be a non-empty string")
+
+    # The state machine only advances up to the first separator character. If the
+    # separator starts with a state-changing character (quote/paren/bracket/backtick),
+    # the top-level detection semantics become ambiguous. Reject such separators
+    # explicitly instead of silently misbehaving.
+    if sep[0] in "'\"[]`()":
+        raise ValueError(
+            "split_top_level: separators starting with quotes, brackets, backticks, "
+            "or parentheses are not supported"
+        )
+
     def _advance_state(text, frm, to, mode, level):
         i = frm
         while i < to:
