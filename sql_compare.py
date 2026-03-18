@@ -401,19 +401,16 @@ def _tokenize_from_clause_body(body: str) -> list:
             level = max(0, level - 1)
 
         if level == 0:
-            if joinkw:
+            if joinkw or condkw:
                 text_part = body[last_end:match.start()]
                 text_part_collapsed = collapse_whitespace(text_part).strip()
                 if text_part_collapsed:
                     tokens.append(("TEXT", text_part_collapsed))
-                tokens.append(("JOINKW", collapse_whitespace(joinkw).upper()))
-                last_end = match.end()
-            elif condkw:
-                text_part = body[last_end:match.start()]
-                text_part_collapsed = collapse_whitespace(text_part).strip()
-                if text_part_collapsed:
-                    tokens.append(("TEXT", text_part_collapsed))
-                tokens.append(("CONDKW", collapse_whitespace(condkw).upper()))
+
+                if joinkw:
+                    tokens.append(("JOINKW", collapse_whitespace(joinkw).upper()))
+                elif condkw:
+                    tokens.append(("CONDKW", collapse_whitespace(condkw).upper()))
                 last_end = match.end()
 
     remaining = body[last_end:]
