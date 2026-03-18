@@ -385,39 +385,40 @@ class TestTopLevelFindKw(unittest.TestCase):
 
 class TestSecurity(unittest.TestCase):
     def test_dos_stdin_unbounded_read(self):
+    def test_dos_stdin_unbounded_read(self):
         """Verify that reading from stdin bounds the input to MAX_FILE_SIZE_BYTES to prevent DoS."""
         from sql_compare import read_from_stdin_two_parts
         from unittest.mock import patch, MagicMock
 
-        # Test case where input exceeds mocked MAX_FILE_SIZE_BYTES limit
-        mock_limit = 100
-        mock_mb = 0.0001
-
-        excessive_input = "A" * (mock_limit + 1)
         mock_stdin = MagicMock()
-        mock_stdin.read.return_value = excessive_input
 
-        with patch("sql_compare.sys.stdin", mock_stdin), \
-             patch("sql_compare.MAX_FILE_SIZE_BYTES", mock_limit), \
-             patch("sql_compare.MAX_FILE_SIZE_MB", mock_mb):
-            with self.assertRaises(ValueError) as cm:
-                read_from_stdin_two_parts()
-            self.assertEqual(str(cm.exception), f"Input too large. Limit is {mock_mb} MB.")
+        # Test case where input exceeds mocked MAX_FILE_SIZE_BYTES limit
+        with self.subTest("input exceeds limit"):
+            mock_limit = 100
+            mock_mb = 0.0001
+            mock_stdin.read.return_value = "A" * (mock_limit + 1)
+            mock_stdin.reset_mock()
 
-            mock_stdin.read.assert_called_once_with(mock_limit + 1)
+            with patch("sql_compare.sys.stdin", mock_stdin), \
+                 patch("sql_compare.MAX_FILE_SIZE_BYTES", mock_limit), \
+                 patch("sql_compare.MAX_FILE_SIZE_MB", mock_mb):
+                with self.assertRaisesRegex(ValueError, f"Input too large. Limit is {mock_mb} MB."):
+                    read_from_stdin_two_parts()
+
+                mock_stdin.read.assert_called_once_with(mock_limit + 1)
 
         # Test case where valid input within limit is accepted
-        valid_input = "SELECT 1\n---\nSELECT 2"
-        mock_stdin.reset_mock()
-        mock_stdin.read.return_value = valid_input
+        with self.subTest("valid input within limit"):
+            mock_stdin.read.return_value = "SELECT 1\n---\nSELECT 2"
+            mock_stdin.reset_mock()
 
-        with patch("sql_compare.sys.stdin", mock_stdin), \
-             patch("sql_compare.MAX_FILE_SIZE_BYTES", 1000):
-            part1, part2 = read_from_stdin_two_parts()
-            self.assertEqual(part1, "SELECT 1")
-            self.assertEqual(part2, "SELECT 2")
+            with patch("sql_compare.sys.stdin", mock_stdin), \
+                 patch("sql_compare.MAX_FILE_SIZE_BYTES", 1000):
+                part1, part2 = read_from_stdin_two_parts()
+                self.assertEqual(part1, "SELECT 1")
+                self.assertEqual(part2, "SELECT 2")
 
-            mock_stdin.read.assert_called_once_with(1001)
+                mock_stdin.read.assert_called_once_with(1001)
 
     def test_xss_in_html_report_summary(self):
         """Verify that XSS payloads in summary lines are escaped in HTML output."""
