@@ -240,12 +240,12 @@ def split_top_level(s: str, sep: str) -> list:
     for m in pattern.finditer(s):
         candidate = m.start()
         mode, level = _advance_state(s, prev_idx, candidate, mode, level)
-        prev_idx = candidate
 
         if mode is None and level == 0:
             parts.append(s[last_split:candidate].strip())
             last_split = m.end()
-            prev_idx = m.end()
+
+        prev_idx = m.end()
 
     parts.append(s[last_split:].strip())
     return [p for p in parts if p != ""]
