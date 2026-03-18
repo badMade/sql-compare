@@ -576,12 +576,7 @@ def _select_items(sql: str):
     if fi == -1: return []
     lst = s[si + 6:fi].strip()
 
-    items = []
-    for x in split_top_level(lst, ","):
-        val = collapse_whitespace(x).upper()
-        if val:
-            items.append(val)
-    return items
+    items = [v for v in (collapse_whitespace(x).upper() for x in split_top_level(lst, ",")) if v]
 
 
 def _where_and_terms(sql: str):
