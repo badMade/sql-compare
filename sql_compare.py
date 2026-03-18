@@ -205,44 +205,33 @@ def tokenize(sql: str):
     return [m.group(0) for m in TOKEN_REGEX.finditer(sql) if not m.group(0).isspace()]
 
 
+def _advance_state(text: str, frm: int, to: int, mode: str, level: int):
+    """Advance the quote/paren state machine from index *frm* up to (not including) *to*."""
+    i = frm
+    while i < to:
+        ch = text[i]
+        if mode is None:
+            if ch == "'": mode = 'single'
+            elif ch == '"': mode = 'double'
+            elif ch == '[': mode = 'bracket'
+            elif ch == '`': mode = 'backtick'
+            elif ch == '(': level += 1
+            elif ch == ')': level = max(0, level - 1)
+        else:
+            if mode == 'single' and ch == "'":
+                if i + 1 < len(text) and text[i + 1] == "'": i += 1
+                else: mode = None
+            elif mode == 'double' and ch == '"':
+                if i + 1 < len(text) and text[i + 1] == '"': i += 1
+                else: mode = None
+            elif mode == 'bracket' and ch == ']': mode = None
+            elif mode == 'backtick' and ch == '`': mode = None
+        i += 1
+    return mode, level
+
+
 def split_top_level(s: str, sep: str) -> list:
     """Split by sep at top-level (not inside quotes/parentheses/brackets/backticks)."""
-    if not sep:
-        raise ValueError("split_top_level: 'sep' must be a non-empty string")
-
-    # The state machine only advances up to the first separator character. If the
-    # separator starts with a state-changing character (quote/paren/bracket/backtick),
-    # the top-level detection semantics become ambiguous. Reject such separators
-    # explicitly instead of silently misbehaving.
-    if sep[0] in "'\"[]`()":
-        raise ValueError(
-            "split_top_level: separators starting with quotes, brackets, backticks, "
-            "or parentheses are not supported"
-        )
-
-    def _advance_state(text, frm, to, mode, level):
-        i = frm
-        while i < to:
-            ch = text[i]
-            if mode is None:
-                if ch == "'": mode = 'single'
-                elif ch == '"': mode = 'double'
-                elif ch == '[': mode = 'bracket'
-                elif ch == '`': mode = 'backtick'
-                elif ch == '(': level += 1
-                elif ch == ')': level = max(0, level - 1)
-            else:
-                if mode == 'single' and ch == "'":
-                    if i + 1 < len(text) and text[i + 1] == "'": i += 1
-                    else: mode = None
-                elif mode == 'double' and ch == '"':
-                    if i + 1 < len(text) and text[i + 1] == '"': i += 1
-                    else: mode = None
-                elif mode == 'bracket' and ch == ']': mode = None
-                elif mode == 'backtick' and ch == '`': mode = None
-            i += 1
-        return mode, level
-
     pattern = re.compile(re.escape(sep))
     parts = []
     mode = None
@@ -253,12 +242,12 @@ def split_top_level(s: str, sep: str) -> list:
     for m in pattern.finditer(s):
         candidate = m.start()
         mode, level = _advance_state(s, prev_idx, candidate, mode, level)
+        prev_idx = candidate
 
         if mode is None and level == 0:
             parts.append(s[last_split:candidate].strip())
             last_split = m.end()
-
-        prev_idx = m.end()
+            prev_idx = m.end()
 
     parts.append(s[last_split:].strip())
     return [p for p in parts if p != ""]
@@ -272,32 +261,6 @@ def top_level_find_kw(sql: str, kw: str, start: int = 0):
     """
     kw = kw.upper()
     pattern = re.compile(rf"\b{re.escape(kw)}\b", re.IGNORECASE)
-
-    def _advance_state(sql, frm, to, mode, level):
-        """Advance the quote/paren state machine from index *frm* up to (not including) *to*."""
-        i = frm
-        while i < to:
-            ch = sql[i]
-            if mode is None:
-                if ch == "'": mode = 'single'
-                elif ch == '"': mode = 'double'
-                elif ch == '[': mode = 'bracket'
-                elif ch == '`': mode = 'backtick'
-                elif ch == '(':
-                    level += 1
-                elif ch == ')':
-                    level = max(0, level - 1)
-            else:
-                if mode == 'single' and ch == "'":
-                    if i + 1 < len(sql) and sql[i + 1] == "'": i += 1
-                    else: mode = None
-                elif mode == 'double' and ch == '"':
-                    if i + 1 < len(sql) and sql[i + 1] == '"': i += 1
-                    else: mode = None
-                elif mode == 'bracket' and ch == ']': mode = None
-                elif mode == 'backtick' and ch == '`': mode = None
-            i += 1
-        return mode, level
 
     mode = None; level = 0; prev = start
     for m in pattern.finditer(sql, pos=start):
