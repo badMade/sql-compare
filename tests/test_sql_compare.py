@@ -662,21 +662,39 @@ class TestTopLevelFindKw(unittest.TestCase):
 
 
 class TestSecurity(unittest.TestCase):
-    def test_unbounded_stdin_dos(self):
-        """Verify that read_from_stdin_two_parts limits read size to prevent DoS."""
-        import sys
-        from unittest.mock import patch
+    def test_dos_stdin_unbounded_read(self):
+        """Verify that reading from stdin bounds the input to MAX_FILE_SIZE_BYTES to prevent DoS."""
         from sql_compare import read_from_stdin_two_parts
+        from unittest.mock import patch, MagicMock
 
-        class MockStdin:
-            def read(self, size=-1):
-                if size == -1:
-                    raise Exception("Unbounded read called!")
-                return "a" * size
+        # Test case where input exceeds mocked MAX_FILE_SIZE_BYTES limit
+        mock_limit = 100
+        mock_mb = 0.0001
 
-        with patch('sql_compare.MAX_FILE_SIZE_BYTES', 100), patch("sys.stdin", MockStdin()):
-            with self.assertRaisesRegex(ValueError, "Input too large: stdin exceeds"):
+        excessive_input = "A" * (mock_limit + 1)
+        mock_stdin = MagicMock()
+        mock_stdin.read.return_value = excessive_input
+
+        with patch("sql_compare.sys.stdin", mock_stdin), \
+             patch("sql_compare.MAX_FILE_SIZE_BYTES", mock_limit), \
+             patch("sql_compare.MAX_FILE_SIZE_MB", mock_mb):
+            with self.assertRaisesRegex(ValueError, f"Input too large. Limit is {mock_mb} MB."):
                 read_from_stdin_two_parts()
+
+            mock_stdin.read.assert_called_once_with(mock_limit + 1)
+
+        # Test case where valid input within limit is accepted
+        valid_input = "SELECT 1\n---\nSELECT 2"
+        mock_stdin.reset_mock()
+        mock_stdin.read.return_value = valid_input
+
+        with patch("sql_compare.sys.stdin", mock_stdin), \
+             patch("sql_compare.MAX_FILE_SIZE_BYTES", 1000):
+            part1, part2 = read_from_stdin_two_parts()
+            self.assertEqual(part1, "SELECT 1")
+            self.assertEqual(part2, "SELECT 2")
+
+            mock_stdin.read.assert_called_once_with(1001)
 
     def test_xss_in_html_report_summary(self):
         """Verify that XSS payloads in summary lines are escaped in HTML output."""
