@@ -1,8 +1,9 @@
 import unittest
+from unittest.mock import patch
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw,
+    top_level_find_kw, read_from_stdin_two_parts,
 )
 
 class TestCanonicalizeJoins(unittest.TestCase):
@@ -408,11 +409,9 @@ class TestSecurity(unittest.TestCase):
             os.unlink(tmp_path)
 
 
-from unittest.mock import patch
-from sql_compare import read_from_stdin_two_parts
-
 class TestReadFromStdinTwoParts(unittest.TestCase):
     @patch('sys.stdin.read')
+    def test_valid_input_two_parts(self, mock_stdin_read):
     def test_valid_input_two_parts(self, mock_stdin_read):
         """Valid input with exactly two parts separated by '---'."""
         mock_stdin_read.return_value = "part1\n---\npart2"
