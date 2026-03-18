@@ -1,4 +1,6 @@
 import unittest
+import argparse
+from unittest.mock import patch
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
@@ -429,6 +431,7 @@ class TestStripSqlComments(unittest.TestCase):
         sql = "SELECT /**/ * FROM my_table;"
         expected = "SELECT  * FROM my_table;"
         self.assertEqual(strip_sql_comments(sql), expected)
+
     def test_comment_like_sequences_in_strings(self):
         """Ensures comment-like sequences in string literals are not stripped."""
         with self.subTest("Line comment in string"):
