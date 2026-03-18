@@ -391,7 +391,6 @@ def _tokenize_from_clause_body(body: str) -> list:
                 else: mode = None
             elif mode == 'bracket' and ch == ']': mode = None
             elif mode == 'backtick' and ch == '`': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
         buf.append(ch)
         i += 1
     flush_buf()
@@ -738,7 +737,9 @@ def parse_args(argv):
 
 
 def read_from_stdin_two_parts():
-    raw = sys.stdin.read()
+    raw = sys.stdin.read(MAX_FILE_SIZE_BYTES + 1)
+    if len(raw) > MAX_FILE_SIZE_BYTES:
+        raise ValueError(f"Input too large: stdin exceeds {MAX_FILE_SIZE_MB} MB limit.")
     parts = re.split(r"^\s*---\s*$", raw, flags=re.M)
     if len(parts) != 2:
         raise ValueError("When using --stdin, provide exactly two parts separated by a line containing only ---")
@@ -965,7 +966,38 @@ class SQLCompareGUI:
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
-        self.txt.insert("1.0", "Select files and click Compare to see results here.")
+
+        def _readonly_handler(event):
+            CTRL_MASK = 0x0004   # Control on X11/Windows
+            MOD1_MASK = 0x0008   # Command on macOS
+            MODIFIER_KEYSYMS = {'Control_L', 'Control_R', 'Shift_L', 'Shift_R',
+                                'Alt_L', 'Alt_R', 'Super_L', 'Super_R',
+                                'Meta_L', 'Meta_R', 'Caps_Lock', 'Num_Lock'}
+            NAV_KEYSYMS = {'Up', 'Down', 'Left', 'Right', 'Prior', 'Next',
+                           'Home', 'End'}
+            if event.keysym in MODIFIER_KEYSYMS:
+                return None
+            if event.keysym in NAV_KEYSYMS:
+                return None
+            if event.keysym.startswith('F') and event.keysym[1:].isdigit():
+                return None
+            if event.keysym.lower() in ('c', 'a') and (event.state & (CTRL_MASK | MOD1_MASK)):
+                return None
+            return "break"
+
+        def _focus_next(event):
+            event.widget.tk_focusNext().focus_set()
+            return "break"
+
+        def _focus_prev(event):
+            event.widget.tk_focusPrev().focus_set()
+            return "break"
+
+        self.txt.bind("<Key>", _readonly_handler)
+        self.txt.bind("<Tab>", _focus_next)
+        self.txt.bind("<ISO_Left_Tab>", _focus_prev)
+        self.txt.tag_configure("empty", foreground="gray", justify="center")
+        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
 
     def _toggle_join_options(self):
         # Enable/disable dependent flags based on global join toggle
@@ -988,7 +1020,7 @@ class SQLCompareGUI:
 
     def clear_output(self):
         self.txt.delete("1.0", "end")
-        self.txt.insert("1.0", "Select files and click Compare to see results here.")
+        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
         self.btn_copy.state(['disabled'])
         self.btn_clear.state(['disabled'])
         self.btn_save.state(['disabled'])
