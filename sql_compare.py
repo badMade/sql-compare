@@ -362,31 +362,39 @@ FROM_BODY_TOKENIZER_RE = re.compile(
 )
 
 def _tokenize_from_clause_body(body: str) -> list:
-    """Tokenize FROM body efficiently without O(N^2) loops using regex."""
+    """Tokenize a FROM-clause body while ignoring quoted JOIN/ON text."""
     tokens = []
     level = 0
     prev = 0
 
     def add_text(start, end):
-        text = collapse_whitespace(body[start:end]).strip()
+        text = collapse_whitespace(body[start:end])
         if text:
             tokens.append(("TEXT", text))
 
-    for m in FROM_BODY_TOKENIZER_RE.finditer(body):
-        if m.group(1): # quoted string
-            pass
-        elif m.group(2): # (
+    for match in FROM_BODY_TOKENIZER_RE.finditer(body):
+        if match.group(1):
+            continue
+        if match.group(2):
             level += 1
-        elif m.group(3): # )
+            continue
+        if match.group(3):
             level = max(0, level - 1)
-        elif m.group(4) and level == 0: # JOINKW
-            add_text(prev, m.start())
-            tokens.append(("JOINKW", collapse_whitespace(m.group(4)).upper()))
-            prev = m.end()
-        elif m.group(5) and level == 0: # CONDKW
-            add_text(prev, m.start())
-            tokens.append(("CONDKW", m.group(5).upper()))
-            prev = m.end()
+            continue
+        if level != 0:
+            continue
+
+        keyword = match.group(4)
+        token_type = "JOINKW"
+        if keyword is None:
+            keyword = match.group(5)
+            token_type = "CONDKW"
+        if keyword is None:
+            continue
+
+        add_text(prev, match.start())
+        tokens.append((token_type, collapse_whitespace(keyword).upper()))
+        prev = match.end()
 
     add_text(prev, len(body))
     return tokens
