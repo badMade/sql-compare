@@ -4,6 +4,8 @@ from unittest.mock import patch
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
+    top_level_find_kw, remove_outer_parentheses,
+    _extract_join_segments
     top_level_find_kw, collapse_whitespace,
     _tokenize_from_clause_body,
 )
@@ -795,26 +797,122 @@ class TestRemoveOuterParentheses(unittest.TestCase):
         self.assertEqual(remove_outer_parentheses("()"), "")
         self.assertEqual(remove_outer_parentheses(" ( ) "), "")
 
-class TestTokenizeFromClauseBody(unittest.TestCase):
-    def test_tokenize_from_clause_body(self):
-        test_cases = {
-            "basic_tokenize": (
-                "t1 JOIN t2 ON t1.id = t2.id",
-                [('TEXT', 't1'), ('JOINKW', 'JOIN'), ('TEXT', 't2'), ('CONDKW', 'ON'), ('TEXT', 't1.id = t2.id')],
-            ),
-            "tokenize_with_parens": (
-                "t1 LEFT JOIN (t2 JOIN t3 ON t2.id = t3.id) ON t1.id = t2.id",
-                [('TEXT', 't1'), ('JOINKW', 'LEFT JOIN'), ('TEXT', '(t2 JOIN t3 ON t2.id = t3.id)'), ('CONDKW', 'ON'), ('TEXT', 't1.id = t2.id')],
-            ),
-            "quoted_join_keywords_stay_text": (
-                "t1 JOIN [JOIN] ON `ON` = 'JOIN'",
-                [('TEXT', 't1'), ('JOINKW', 'JOIN'), ('TEXT', "[JOIN]"), ('CONDKW', 'ON'), ('TEXT', "`ON` = 'JOIN'")],
-            ),
-        }
-        for name, (body, expected) in test_cases.items():
-            with self.subTest(name=name):
-                self.assertEqual(_tokenize_from_clause_body(body), expected)
 
+
+
+class TestExtractJoinSegments(unittest.TestCase):
+    def test_empty_tokens(self):
+        """Empty tokens should return empty list."""
+        self.assertEqual(_extract_join_segments([], 0), [])
+
+    def test_single_join_on(self):
+        """Single JOIN with ON condition."""
+        tokens = [
+            ("JOINKW", "JOIN"),
+            ("TEXT", "table2"),
+            ("CONDKW", "ON"),
+            ("TEXT", "t1.id = t2.id")
+        ]
+        expected = [{
+            "type": "INNER",
+            "table": "table2",
+            "cond_kw": "ON",
+            "cond": "t1.id = t2.id"
+        }]
+        self.assertEqual(_extract_join_segments(tokens, 0), expected)
+
+    def test_join_using(self):
+        """JOIN with USING condition."""
+        tokens = [
+            ("JOINKW", "LEFT JOIN"),
+            ("TEXT", "table3"),
+            ("CONDKW", "USING"),
+            ("TEXT", "(id)")
+        ]
+        expected = [{
+            "type": "LEFT",
+            "table": "table3",
+            "cond_kw": "USING",
+            "cond": "(id)"
+        }]
+        self.assertEqual(_extract_join_segments(tokens, 0), expected)
+
+    def test_multiple_joins(self):
+        """Multiple joins in sequence."""
+        tokens = [
+            ("JOINKW", "JOIN"),
+            ("TEXT", "table2"),
+            ("CONDKW", "ON"),
+            ("TEXT", "t1.id = t2.id"),
+            ("JOINKW", "RIGHT OUTER JOIN"),
+            ("TEXT", "table3"),
+            ("CONDKW", "ON"),
+            ("TEXT", "t2.id = t3.id")
+        ]
+        expected = [
+            {
+                "type": "INNER",
+                "table": "table2",
+                "cond_kw": "ON",
+                "cond": "t1.id = t2.id"
+            },
+            {
+                "type": "RIGHT",
+                "table": "table3",
+                "cond_kw": "ON",
+                "cond": "t2.id = t3.id"
+            }
+        ]
+        self.assertEqual(_extract_join_segments(tokens, 0), expected)
+
+    def test_join_without_condition(self):
+        """JOIN without a condition (e.g. CROSS JOIN)."""
+        tokens = [
+            ("JOINKW", "CROSS JOIN"),
+            ("TEXT", "table2")
+        ]
+        expected = [{
+            "type": "CROSS",
+            "table": "table2",
+            "cond_kw": None,
+            "cond": ""
+        }]
+        self.assertEqual(_extract_join_segments(tokens, 0), expected)
+
+    def test_start_index(self):
+        """Test with a non-zero start index."""
+        tokens = [
+            ("TEXT", "table1"),
+            ("JOINKW", "JOIN"),
+            ("TEXT", "table2"),
+            ("CONDKW", "ON"),
+            ("TEXT", "t1.id = t2.id")
+        ]
+        expected = [{
+            "type": "INNER",
+            "table": "table2",
+            "cond_kw": "ON",
+            "cond": "t1.id = t2.id"
+        }]
+        self.assertEqual(_extract_join_segments(tokens, 1), expected)
+
+    def test_ignores_non_join_start(self):
+        """Test ignoring non-join tokens at the beginning."""
+        tokens = [
+            ("TEXT", "table1"),
+            ("TEXT", "some_alias"),
+            ("JOINKW", "JOIN"),
+            ("TEXT", "table2"),
+            ("CONDKW", "ON"),
+            ("TEXT", "t1.id = t2.id")
+        ]
+        expected = [{
+            "type": "INNER",
+            "table": "table2",
+            "cond_kw": "ON",
+            "cond": "t1.id = t2.id"
+        }]
+        self.assertEqual(_extract_join_segments(tokens, 0), expected)
 
 if __name__ == '__main__':
     unittest.main()
