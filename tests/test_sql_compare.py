@@ -444,21 +444,20 @@ class TestLoadInputs(unittest.TestCase):
         mock_safe_read.assert_any_call("file1.sql")
         mock_safe_read.assert_any_call("file2.sql")
 
-    def test_no_inputs(self):
-        """Should return None if no valid inputs are provided."""
-        args = argparse.Namespace(strings=[], stdin=False, files=[])
-        a, b, mode = load_inputs(args)
-        self.assertEqual(a, None)
-        self.assertEqual(b, None)
-        self.assertEqual(mode, None)
+    def test_invalid_inputs(self):
+        """Should return None for various invalid input configurations."""
+        test_cases = {
+            "no inputs": argparse.Namespace(strings=[], stdin=False, files=[]),
+            "files with one item": argparse.Namespace(strings=[], stdin=False, files=["file1.sql"]),
+            "files with three items": argparse.Namespace(strings=[], stdin=False, files=["file1.sql", "file2.sql", "file3.sql"]),
+        }
 
-    def test_files_invalid_length(self):
-        """Should return None if args.files is provided but does not have exactly two items."""
-        args = argparse.Namespace(strings=[], stdin=False, files=["file1.sql"])
-        a, b, mode = load_inputs(args)
-        self.assertEqual(a, None)
-        self.assertEqual(b, None)
-        self.assertEqual(mode, None)
+        for name, args in test_cases.items():
+            with self.subTest(name):
+                a, b, mode = load_inputs(args)
+                self.assertEqual(a, None)
+                self.assertEqual(b, None)
+                self.assertEqual(mode, None)
 
 
 if __name__ == '__main__':
