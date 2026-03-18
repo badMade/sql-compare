@@ -432,9 +432,9 @@ class TestCanonicalizeSelectList(unittest.TestCase):
              "SELECT b AS z, a AS y FROM t",
              "SELECT a AS y, b AS z FROM t"),
 
-            ("No FROM clause (should not change)",
+            ("No FROM clause (should be reordered)",
              "SELECT 2, 1",
-             "SELECT 2, 1"),
+             "SELECT 1, 2"),
 
             ("Not starting with SELECT (e.g., WITH clause)",
              "WITH cte AS (SELECT 1) SELECT b, a FROM t",
