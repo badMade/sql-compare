@@ -460,13 +460,23 @@ class TestSplitTopLevel(unittest.TestCase):
 
     def test_unbalanced_modes(self):
         # Since the loop ends when the string ends, whatever is in the buffer gets appended
-        self.assertEqual(split_top_level("A, [B, C", ","), ["A", "[B, C"])
-        self.assertEqual(split_top_level("A, (B, C", ","), ["A", "(B, C"])
-        self.assertEqual(split_top_level("A, 'B, C", ","), ["A", "'B, C"])
+        test_cases = [
+            ("unbalanced bracket", "A, [B, C", ",", ["A", "[B, C"]),
+            ("unbalanced parenthesis", "A, (B, C", ",", ["A", "(B, C"]),
+            ("unbalanced single quote", "A, 'B, C", ",", ["A", "'B, C"]),
+        ]
+        for description, sql, sep, expected in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(split_top_level(sql, sep), expected)
 
     def test_ignore_case(self):
         # We simulate the calling side passing `sep` correctly case-insensitively, or we test that it only splits exactly case-sensitively based on the current implementation.
         # The current implementation uses `s.startswith(sep, i)`, which is case-sensitive.
         # So we should verify case-sensitive behavior here.
-        self.assertEqual(split_top_level("A and B AND C", " AND "), ["A and B", "C"])
-        self.assertEqual(split_top_level("A AND B AND C", " AND "), ["A", "B", "C"])
+        test_cases = [
+            ("mixed case separator not matched", "A and B AND C", " AND ", ["A and B", "C"]),
+            ("matching case separator matched", "A AND B AND C", " AND ", ["A", "B", "C"]),
+        ]
+        for description, sql, sep, expected in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(split_top_level(sql, sep), expected)

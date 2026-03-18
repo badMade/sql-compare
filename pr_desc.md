@@ -3,7 +3,7 @@
 📊 **Coverage:** The new `TestSplitTopLevel` class comprehensively tests:
 - Basic splitting functionality
 - Ignoring separators inside single and double quotes
-- Ignoring separators inside brackets `[]` and backticks `` ` ``
+- Ignoring separators inside brackets `[]` and backticks ``` `` ```
 - Ignoring separators inside nested parentheses `()`
 - Empty string and separator-only handling
 - Handling of consecutive separators (e.g., `A,,B`)
