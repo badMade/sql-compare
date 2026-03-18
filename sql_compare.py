@@ -133,7 +133,7 @@ def uppercase_outside_quotes(s: str) -> str:
     return "".join(out)
 
 
-def remove_trailing_semicolon(s: str) -> str:
+def remove_trailing_semicolon(s: 'Optional[str]') -> 'Optional[str]':
     if s is None:
         return None
     s = s.strip()
