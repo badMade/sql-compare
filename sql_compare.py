@@ -991,13 +991,34 @@ class SQLCompareGUI:
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
 
         def _readonly_handler(event):
-            if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Prior', 'Next', 'Home', 'End'):
+            CTRL_MASK = 0x0004   # Control on X11/Windows
+            MOD1_MASK = 0x0008   # Command on macOS
+            MODIFIER_KEYSYMS = {'Control_L', 'Control_R', 'Shift_L', 'Shift_R',
+                                'Alt_L', 'Alt_R', 'Super_L', 'Super_R',
+                                'Meta_L', 'Meta_R', 'Caps_Lock', 'Num_Lock'}
+            NAV_KEYSYMS = {'Up', 'Down', 'Left', 'Right', 'Prior', 'Next',
+                           'Home', 'End'}
+            if event.keysym in MODIFIER_KEYSYMS:
                 return None
-            if event.keysym.lower() in ('c', 'a') and (event.state & 4 or event.state & 8):
+            if event.keysym in NAV_KEYSYMS:
+                return None
+            if event.keysym.startswith('F') and event.keysym[1:].isdigit():
+                return None
+            if event.keysym.lower() in ('c', 'a') and (event.state & (CTRL_MASK | MOD1_MASK)):
                 return None
             return "break"
 
+        def _focus_next(event):
+            event.widget.tk_focusNext().focus_set()
+            return "break"
+
+        def _focus_prev(event):
+            event.widget.tk_focusPrev().focus_set()
+            return "break"
+
         self.txt.bind("<Key>", _readonly_handler)
+        self.txt.bind("<Tab>", _focus_next)
+        self.txt.bind("<ISO_Left_Tab>", _focus_prev)
         self.txt.tag_configure("empty", foreground="gray", justify="center")
         self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
 

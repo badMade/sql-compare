@@ -93,6 +93,32 @@ class TestGUIEmptyState(unittest.TestCase):
         # Text content must remain unchanged after copy
         self.assertEqual(self.gui.txt.get("1.0", "end-1c"), content)
 
+    def test_allowed_keys_not_blocked(self) -> None:
+        """Keys allowed by the readonly handler must pass through without modifying text."""
+        content = "Hello World"
+        self.gui.txt.delete("1.0", "end")
+        self.gui.txt.insert("1.0", content)
+        self.gui.txt.focus_set()
+        self.root.update_idletasks()
+
+        test_cases = {
+            "modifier Control_L": ("<KeyPress>", {"keysym": "Control_L"}),
+            "modifier Shift_L": ("<KeyPress>", {"keysym": "Shift_L"}),
+            "modifier Alt_L": ("<KeyPress>", {"keysym": "Alt_L"}),
+            "Tab key": ("<Tab>", {}),
+            "Function key F5": ("<F5>", {}),
+        }
+
+        for desc, (event_string, options) in test_cases.items():
+            with self.subTest(desc=desc):
+                self.gui.txt.event_generate(event_string, **options)
+                self.root.update_idletasks()
+                self.assertEqual(
+                    self.gui.txt.get("1.0", "end-1c"),
+                    content,
+                    f"Text content changed after {desc} event",
+                )
+
     def test_initial_empty_state(self) -> None:
         # Assert tag exists and has correct config
         self.assertEqual(self.gui.txt.tag_cget("empty", "foreground"), "gray")
