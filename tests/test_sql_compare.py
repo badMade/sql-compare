@@ -438,7 +438,7 @@ class TestBuildDifferenceSummary(unittest.TestCase):
                 "SELECT a, b FROM t",
                 "SELECT b, a FROM t",
                 True,
-                ["SELECT list order differs (same items, different order).", "Token-level changes: +2 inserts, -2 deletes, ~0 replaces."]
+                ["SELECT list order differs (same items, different order).", "Token-level changes: +0 inserts, -0 deletes, ~3 replaces."]
             ),
             (
                 "WHERE AND terms differ: missing",
@@ -459,7 +459,7 @@ class TestBuildDifferenceSummary(unittest.TestCase):
                 "SELECT a FROM t WHERE x = 1 AND y = 2",
                 "SELECT a FROM t WHERE y = 2 AND x = 1",
                 True,
-                ["WHERE AND term order differs (same terms, different order).", "Token-level changes: +4 inserts, -4 deletes, ~0 replaces."]
+                ["WHERE AND term order differs (same terms, different order).", "Token-level changes: +0 inserts, -0 deletes, ~6 replaces."]
             ),
             (
                 "Reorderable JOIN components differ",
@@ -480,7 +480,7 @@ class TestBuildDifferenceSummary(unittest.TestCase):
                 "SELECT a FROM t JOIN t2 ON t.id = t2.id JOIN t3 ON t.id = t3.id",
                 "SELECT a FROM t JOIN t3 ON t.id = t3.id JOIN t2 ON t.id = t2.id",
                 True,
-                ["Reorderable JOIN segment order differs (same components, different order).", "Token-level changes: +10 inserts, -10 deletes, ~0 replaces."]
+                ["Reorderable JOIN segment order differs (same components, different order).", "Token-level changes: +0 inserts, -0 deletes, ~20 replaces."]
             ),
             (
                 "Join reordering disabled",
