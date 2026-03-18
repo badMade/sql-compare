@@ -1,0 +1,46 @@
+name: Cleanup Redundant PRs
+
+on:
+  push:
+    branches:
+      - claude/remove-redundant-prs-*
+  workflow_dispatch:
+
+jobs:
+  close-redundant-prs:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+      contents: read
+    steps:
+      - name: Close redundant PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const redundantPRs = [
+              // Bolt: uppercase_outside_quotes regex optimization (keep #174)
+              164
+            ];
+
+            for (const pr of redundantPRs) {
+              try {
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr,
+                  state: 'closed'
+                });
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr,
+                  body: 'Closing as redundant — a newer PR addresses the same issue.'
+                });
+                console.log(`Closed PR #${pr}`);
+              } catch (e) {
+                core.error(`Failed to close PR #${pr}: ${e.message}`);
+                core.setFailed(`Failed to close PR #${pr}`);
+              }
+            }
+            console.log('Done closing redundant PRs.');

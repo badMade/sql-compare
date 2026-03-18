@@ -82,54 +82,31 @@ def collapse_whitespace(s: str) -> str:
     return WHITESPACE_REGEX.sub(" ", s).strip()
 
 
+QUOTED_STRING_REGEX = re.compile(
+    r"""
+    '(?:''|[^'])*(?:'|$)      # Single-quoted strings, handles '' escape and unclosed
+    | "(?:""|[^"])*(?:"|$)      # Double-quoted strings, handles "" escape and unclosed
+    | \[[^\]]*(?:\]|$)          # MS SQL-style [bracketed] identifiers, handles unclosed
+    | `[^`]*(?:`|$)            # MySQL-style `backticked` identifiers, handles unclosed
+    """,
+    re.VERBOSE
+)
+
 def uppercase_outside_quotes(s: str) -> str:
     """
     Uppercase characters outside of quoted regions:
       single quotes '...'; double quotes "..."; [brackets]; `backticks`
     """
     out = []
-    i = 0
-    mode = None  # 'single', 'double', 'bracket', 'backtick'
-    while i < len(s):
-        ch = s[i]
-        if mode is None:
-            if ch == "'":
-                mode = 'single'
-                out.append(ch)
-            elif ch == '"':
-                mode = 'double'
-                out.append(ch)
-            elif ch == '[':
-                mode = 'bracket'
-                out.append(ch)
-            elif ch == '`':
-                mode = 'backtick'
-                out.append(ch)
-            else:
-                out.append(ch.upper())
-        elif mode == 'single':
-            out.append(ch)
-            if ch == "'":
-                if i + 1 < len(s) and s[i + 1] == "'":
-                    out.append(s[i + 1]); i += 1
-                else:
-                    mode = None
-        elif mode == 'double':
-            out.append(ch)
-            if ch == '"':
-                if i + 1 < len(s) and s[i + 1] == '"':
-                    out.append(s[i + 1]); i += 1
-                else:
-                    mode = None
-        elif mode == 'bracket':
-            out.append(ch)
-            if ch == ']':
-                mode = None
-        elif mode == 'backtick':
-            out.append(ch)
-            if ch == '`':
-                mode = None
-        i += 1
+    prev = 0
+    for m in QUOTED_STRING_REGEX.finditer(s):
+        start, end = m.span()
+        if start > prev:
+            out.append(s[prev:start].upper())
+        out.append(m.group(0))
+        prev = end
+    if prev < len(s):
+        out.append(s[prev:].upper())
     return "".join(out)
 
 
@@ -368,56 +345,50 @@ def canonicalize_where_and(sql: str) -> str:
     return collapse_whitespace(s)
 
 
-def _tokenize_from_clause_body(body: str) -> list:
-    i = 0
-    n = len(body)
-    mode = None
-    level = 0
-    tokens = []
-    buf = []
-    def flush_buf():
-        nonlocal buf
-        if buf:
-            tokens.append(("TEXT", collapse_whitespace("".join(buf)).strip()))
-            buf = []
+FROM_BODY_TOKENIZER_RE = re.compile(
+    r"""
+    (
+        '(?:''|[^'])*'?            # single quotes (closed or unclosed)
+      | "(?:""|[^"])*"?            # double quotes (closed or unclosed)
+      | \[[^\]]*\]?                # brackets (closed or unclosed)
+      | `[^`]*`?                   # backticks (closed or unclosed)
+    )
+    | (\()                        # Open paren (group 2)
+    | (\))                        # Close paren (group 3)
+    | \b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b  # JOINKW (group 4)
+    | \b(ON|USING)\b              # CONDKW (group 5)
+    """,
+    re.VERBOSE | re.IGNORECASE
+)
 
-    while i < n:
-        ch = body[i]
-        if mode is None:
-            if ch == "'": mode = 'single'
-            elif ch == '"': mode = 'double'
-            elif ch == '[': mode = 'bracket'
-            elif ch == '`': mode = 'backtick'
-            elif ch == '(':
-                level += 1
-            elif ch == ')':
-                level = max(0, level - 1)
-            if level == 0:
-                m = re.match(r"\b((?:NATURAL\s+)?(?:LEFT|RIGHT|FULL|INNER|CROSS)?(?:\s+OUTER)?\s*JOIN)\b", body[i:], flags=re.I)
-                if m:
-                    flush_buf()
-                    tokens.append(("JOINKW", collapse_whitespace(m.group(1)).upper()))
-                    i += m.end()
-                    continue
-                m2 = re.match(r"\b(ON|USING)\b", body[i:], flags=re.I)
-                if m2:
-                    flush_buf()
-                    tokens.append(("CONDKW", m2.group(1).upper()))
-                    i += m2.end()
-                    continue
-        else:
-            if mode == 'single' and ch == "'":
-                if i + 1 < n and body[i + 1] == "'": buf.append(ch); i += 1
-                else: mode = None
-            elif mode == 'double' and ch == '"':
-                if i + 1 < n and body[i + 1] == '"': buf.append(ch); i += 1
-                else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
-        buf.append(ch)
-        i += 1
-    flush_buf()
+def _tokenize_from_clause_body(body: str) -> list:
+    """Tokenize FROM body efficiently without O(N^2) loops using regex."""
+    tokens = []
+    level = 0
+    prev = 0
+
+    def add_text(start, end):
+        text = collapse_whitespace(body[start:end]).strip()
+        if text:
+            tokens.append(("TEXT", text))
+
+    for m in FROM_BODY_TOKENIZER_RE.finditer(body):
+        if m.group(1): # quoted string
+            pass
+        elif m.group(2): # (
+            level += 1
+        elif m.group(3): # )
+            level = max(0, level - 1)
+        elif m.group(4) and level == 0: # JOINKW
+            add_text(prev, m.start())
+            tokens.append(("JOINKW", collapse_whitespace(m.group(4)).upper()))
+            prev = m.end()
+        elif m.group(5) and level == 0: # CONDKW
+            add_text(prev, m.start())
+            tokens.append(("CONDKW", m.group(5).upper()))
+            prev = m.end()
+
+    add_text(prev, len(body))
     return tokens
 
 
@@ -761,7 +732,9 @@ def parse_args(argv):
 
 
 def read_from_stdin_two_parts():
-    raw = sys.stdin.read()
+    raw = sys.stdin.read(MAX_FILE_SIZE_BYTES + 1)
+    if len(raw) > MAX_FILE_SIZE_BYTES:
+        raise ValueError(f"Input too large: stdin exceeds {MAX_FILE_SIZE_MB} MB limit.")
     parts = re.split(r"^\s*---\s*$", raw, flags=re.M)
     if len(parts) != 2:
         raise ValueError("When using --stdin, provide exactly two parts separated by a line containing only ---")
@@ -988,7 +961,38 @@ class SQLCompareGUI:
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
-        self.txt.insert("1.0", "Select files and click Compare to see results here.")
+
+        def _readonly_handler(event):
+            CTRL_MASK = 0x0004   # Control on X11/Windows
+            MOD1_MASK = 0x0008   # Command on macOS
+            MODIFIER_KEYSYMS = {'Control_L', 'Control_R', 'Shift_L', 'Shift_R',
+                                'Alt_L', 'Alt_R', 'Super_L', 'Super_R',
+                                'Meta_L', 'Meta_R', 'Caps_Lock', 'Num_Lock'}
+            NAV_KEYSYMS = {'Up', 'Down', 'Left', 'Right', 'Prior', 'Next',
+                           'Home', 'End'}
+            if event.keysym in MODIFIER_KEYSYMS:
+                return None
+            if event.keysym in NAV_KEYSYMS:
+                return None
+            if event.keysym.startswith('F') and event.keysym[1:].isdigit():
+                return None
+            if event.keysym.lower() in ('c', 'a') and (event.state & (CTRL_MASK | MOD1_MASK)):
+                return None
+            return "break"
+
+        def _focus_next(event):
+            event.widget.tk_focusNext().focus_set()
+            return "break"
+
+        def _focus_prev(event):
+            event.widget.tk_focusPrev().focus_set()
+            return "break"
+
+        self.txt.bind("<Key>", _readonly_handler)
+        self.txt.bind("<Tab>", _focus_next)
+        self.txt.bind("<ISO_Left_Tab>", _focus_prev)
+        self.txt.tag_configure("empty", foreground="gray", justify="center")
+        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
 
     def _toggle_join_options(self):
         # Enable/disable dependent flags based on global join toggle
@@ -1011,7 +1015,7 @@ class SQLCompareGUI:
 
     def clear_output(self):
         self.txt.delete("1.0", "end")
-        self.txt.insert("1.0", "Select files and click Compare to see results here.")
+        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
         self.btn_copy.state(['disabled'])
         self.btn_clear.state(['disabled'])
         self.btn_save.state(['disabled'])
