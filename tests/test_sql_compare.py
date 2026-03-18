@@ -2,8 +2,30 @@ import unittest
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw,
+    top_level_find_kw, collapse_whitespace,
+    _tokenize_from_clause_body,
 )
+
+
+class TestCollapseWhitespace(unittest.TestCase):
+    def test_collapse_whitespace_edge_cases(self):
+        """Test edge cases for collapse_whitespace function."""
+        test_cases = [
+            # description, input_string, expected_output
+            ("Empty string", "", ""),
+            ("String with only spaces", "     ", ""),
+            ("String with only newlines and tabs", "\n\n\t\t\n", ""),
+            ("Already collapsed string", "SELECT a FROM b", "SELECT a FROM b"),
+            ("Mixed whitespace characters", "SELECT\t\ta\nFROM \r\nb", "SELECT a FROM b"),
+            ("Leading and trailing whitespace", "  SELECT a FROM b  ", "SELECT a FROM b"),
+            ("Multiple consecutive spaces", "SELECT    a    FROM     b", "SELECT a FROM b"),
+            ("Unicode whitespace", "SELECT\u00A0a\u2003FROM\u2009b", "SELECT a FROM b"),
+        ]
+
+        for description, input_str, expected in test_cases:
+            with self.subTest(description=description, input=input_str):
+                self.assertEqual(collapse_whitespace(input_str), expected)
+
 
 class TestCanonicalizeJoins(unittest.TestCase):
     def test_basic_inner_join_reorder(self):
@@ -73,6 +95,146 @@ class TestCanonicalizeJoins(unittest.TestCase):
         sql = "SELECT * FROM t1 NATURAL JOIN t3 NATURAL JOIN t2"
         expected = "SELECT * FROM t1 NATURAL JOIN t2 NATURAL JOIN t3"
         self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_using_clause_reorder(self):
+        """USING clauses are preserved correctly when joins are reordered."""
+        sql = "SELECT * FROM t1 JOIN t3 USING (id) JOIN t2 USING (id)"
+        expected = "SELECT * FROM t1 JOIN t2 USING (id) JOIN t3 USING (id)"
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_single_quoted_join_keyword_in_condition(self):
+        """JOIN keyword inside a single-quoted string in a condition should not be
+        treated as a join separator — the outer joins must still be reordered."""
+        sql = "SELECT * FROM t1 JOIN t3 ON t1.name = 'JOIN me' JOIN t2 ON t1.id = t2.id"
+        expected = "SELECT * FROM t1 JOIN t2 ON t1.id = t2.id JOIN t3 ON t1.name = 'JOIN me'"
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_bracketed_keyword_as_table_name(self):
+        """A bracketed keyword used as a table name (e.g. [ON]) must not be
+        misinterpreted as a SQL keyword — outer joins must still be reordered."""
+        sql = "SELECT * FROM t1 JOIN [ON] ON t1.id = [ON].id JOIN t0 ON t1.id = t0.id"
+        # "[ON]" sorts after "t0" because "[" (ASCII 91) > "T" (ASCII 84)
+        expected = "SELECT * FROM t1 JOIN t0 ON t1.id = t0.id JOIN [ON] ON t1.id = [ON].id"
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_backtick_keyword_as_table_name(self):
+        """A backtick-quoted keyword used as a table name (e.g. `JOIN`) must not be
+        misinterpreted as a SQL keyword — outer joins must still be reordered."""
+        sql = "SELECT * FROM t1 JOIN `JOIN` ON t1.id = `JOIN`.id JOIN t0 ON t1.id = t0.id"
+        # "`JOIN`" sorts after "t0" because "`" (ASCII 96) > "T" (ASCII 84)
+        expected = "SELECT * FROM t1 JOIN t0 ON t1.id = t0.id JOIN `JOIN` ON t1.id = `JOIN`.id"
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_derived_table_subquery_reorder(self):
+        """JOIN/ON inside a parenthesized derived table should be treated as part of
+        the table expression and must not interfere with top-level join reordering."""
+        sql = (
+            "SELECT * FROM t1 "
+            "JOIN tz ON t1.id = tz.id "
+            "JOIN (SELECT a FROM t2 JOIN t3 ON t2.id = t3.id) sub ON t1.id = sub.id"
+        )
+        # "(SELECT..." sorts before "tz" because "(" (ASCII 40) < "T" (ASCII 84)
+        expected = (
+            "SELECT * FROM t1 "
+            "JOIN (SELECT a FROM t2 JOIN t3 ON t2.id = t3.id) sub ON t1.id = sub.id "
+            "JOIN tz ON t1.id = tz.id"
+        )
+        self.assertEqual(canonicalize_joins(sql), expected)
+
+    def test_derived_table_inner_joins_not_split_out(self):
+        """Inner JOINs inside a derived table must not appear as separate top-level
+        join segments — only the two outer JOINs should be present after reordering."""
+        sql = (
+            "SELECT * FROM t1 "
+            "JOIN tz ON t1.id = tz.id "
+            "JOIN (SELECT a FROM inner1 JOIN inner2 ON inner1.id = inner2.id) sub "
+            "ON t1.id = sub.id"
+        )
+        result = canonicalize_joins(sql)
+        # The subquery body must be preserved as a single unit
+        self.assertIn("(SELECT a FROM inner1 JOIN inner2 ON inner1.id = inner2.id)", result)
+        # inner1 and inner2 must not appear as standalone top-level join targets
+        # (i.e. there should be exactly 3 JOIN occurrences: 2 outer + 1 inside the subquery)
+        self.assertEqual(result.upper().count("JOIN"), 3)
+
+
+class TestTokenizeFromClauseBodyEdgeCases(unittest.TestCase):
+    """Unit tests for _tokenize_from_clause_body, focusing on edge cases where
+    SQL keywords appear inside quoted identifiers or parenthesized subqueries."""
+
+    def _token_kinds(self, tokens):
+        """Return only the token-kind portion of each token."""
+        return [k for k, _ in tokens]
+
+    def test_basic_single_join(self):
+        """Simple JOIN/ON produces TEXT, JOINKW, TEXT, CONDKW, TEXT."""
+        tokens = _tokenize_from_clause_body("t1 JOIN t2 ON t1.id = t2.id")
+        self.assertEqual(self._token_kinds(tokens), ["TEXT", "JOINKW", "TEXT", "CONDKW", "TEXT"])
+
+    def test_join_on_inside_subquery_not_top_level(self):
+        """JOIN and ON inside a parenthesized subquery must not be emitted as
+        top-level JOINKW/CONDKW tokens (level > 0 while inside the parens)."""
+        body = "t1 JOIN (SELECT * FROM t2 JOIN t3 ON t2.id = t3.id) sub ON t1.id = sub.id"
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1,
+                         "Expected exactly one top-level JOINKW")
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1,
+                         "Expected exactly one top-level CONDKW")
+
+    def test_join_inside_deeply_nested_parens_ignored(self):
+        """JOIN inside multiply-nested parentheses must not become a top-level token."""
+        body = "t1 JOIN ((SELECT * FROM t2 JOIN t3 ON t2.id = t3.id)) sub ON t1.id = sub.id"
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1)
+
+    def test_keyword_inside_single_quotes_ignored(self):
+        """JOIN and ON keywords inside a single-quoted string literal must not
+        produce extra JOINKW or CONDKW tokens."""
+        body = "t1 JOIN t2 ON t1.name = 'JOIN ON USING'"
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1)
+
+    def test_keyword_inside_double_quotes_ignored(self):
+        """A double-quoted identifier containing a SQL keyword must not produce an
+        extra JOINKW token; the quoted string is captured as part of a TEXT segment."""
+        body = 't1 JOIN "JOIN" ON t1.id = "JOIN".id'
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1)
+        text_values = [v for k, v in tokens if k == "TEXT"]
+        self.assertTrue(any('"JOIN"' in t for t in text_values),
+                        "The quoted identifier should appear in a TEXT token")
+
+    def test_keyword_inside_brackets_ignored(self):
+        """A bracket-quoted identifier containing a SQL keyword must not produce an
+        extra CONDKW token; the bracketed string is captured as part of a TEXT segment."""
+        body = "t1 JOIN [ON] ON t1.id = [ON].id"
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1)
+        text_values = [v for k, v in tokens if k == "TEXT"]
+        self.assertTrue(any("[ON]" in t for t in text_values),
+                        "The bracketed identifier should appear in a TEXT token")
+
+    def test_keyword_inside_backticks_ignored(self):
+        """A backtick-quoted identifier containing a SQL keyword must not produce an
+        extra CONDKW token; the backtick string is captured as part of a TEXT segment."""
+        body = "t1 JOIN `ON` ON t1.id = `ON`.id"
+        tokens = _tokenize_from_clause_body(body)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "JOINKW"), 1)
+        self.assertEqual(sum(1 for k, _ in tokens if k == "CONDKW"), 1)
+        text_values = [v for k, v in tokens if k == "TEXT"]
+        self.assertTrue(any("`ON`" in t for t in text_values),
+                        "The backtick-quoted identifier should appear in a TEXT token")
+
+    def test_using_keyword_tokenized_as_condkw(self):
+        """USING is tokenized as a CONDKW, not ignored."""
+        body = "t1 JOIN t2 USING (id)"
+        tokens = _tokenize_from_clause_body(body)
+        cond_values = [v for k, v in tokens if k == "CONDKW"]
+        self.assertEqual(cond_values, ["USING"])
 
 
 class TestClauseEndIndex(unittest.TestCase):
@@ -384,6 +546,22 @@ class TestTopLevelFindKw(unittest.TestCase):
 
 
 class TestSecurity(unittest.TestCase):
+    def test_unbounded_stdin_dos(self):
+        """Verify that read_from_stdin_two_parts limits read size to prevent DoS."""
+        import sys
+        from unittest.mock import patch
+        from sql_compare import read_from_stdin_two_parts
+
+        class MockStdin:
+            def read(self, size=-1):
+                if size == -1:
+                    raise Exception("Unbounded read called!")
+                return "a" * size
+
+        with patch('sql_compare.MAX_FILE_SIZE_BYTES', 100), patch("sys.stdin", MockStdin()):
+            with self.assertRaisesRegex(ValueError, "Input too large: stdin exceeds"):
+                read_from_stdin_two_parts()
+
     def test_xss_in_html_report_summary(self):
         """Verify that XSS payloads in summary lines are escaped in HTML output."""
         import tempfile, os
@@ -407,6 +585,81 @@ class TestSecurity(unittest.TestCase):
         finally:
             os.unlink(tmp_path)
 
+
+
+class TestTokenizeFromClauseBody(unittest.TestCase):
+    def test_backticks(self):
+        """Should correctly parse backticks in a FROM clause body."""
+        from sql_compare import _tokenize_from_clause_body
+        sql = "t1 JOIN t2 ON t1.`id` = t2.`id`"
+        tokens = _tokenize_from_clause_body(sql)
+        self.assertEqual(tokens, [
+            ('TEXT', 't1'),
+            ('JOINKW', 'JOIN'),
+            ('TEXT', 't2'),
+            ('CONDKW', 'ON'),
+            ('TEXT', 't1.`id` = t2.`id`')
+        ])
+class TestCollapseWhitespace(unittest.TestCase):
+    def test_collapse_whitespace_scenarios(self):
+        """Test various scenarios for whitespace collapsing."""
+        test_cases = {
+            "basic_collapse": ("SELECT  *   FROM    t1", "SELECT * FROM t1"),
+            "mixed_whitespace_sql": ("SELECT\t*\nFROM\r\nt1", "SELECT * FROM t1"),
+            "mixed_whitespace_simple": ("A \t \n B", "A B"),
+            "trimming_spaces": ("   SELECT * FROM t1  ", "SELECT * FROM t1"),
+            "trimming_mixed": ("\n\tSELECT * FROM t1\r\n", "SELECT * FROM t1"),
+            "no_whitespace_sql": ("SELECT*FROM(t1)", "SELECT*FROM(t1)"),
+            "no_whitespace_word": ("word", "word"),
+            "empty_string": ("", ""),
+            "only_whitespace": ("   \t\n  ", ""),
+        }
+
+        for name, (input_str, expected) in test_cases.items():
+            with self.subTest(name=name):
+                self.assertEqual(collapse_whitespace(input_str), expected)
+
+
+class TestRemoveOuterParentheses(unittest.TestCase):
+    def test_basic_single_layer(self):
+        """Should remove a single layer of outer parentheses."""
+        sql = "(SELECT * FROM t)"
+        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
+
+    def test_multiple_layers(self):
+        """Should remove multiple layers of outer parentheses."""
+        sql = "(((SELECT * FROM t)))"
+        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
+
+    def test_no_parentheses(self):
+        """Should return the string unmodified if no outer parentheses exist."""
+        sql = "SELECT * FROM t"
+        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
+
+    def test_unmatched_parentheses(self):
+        """Should return the string unmodified if parentheses are not matched at the ends."""
+        sql = "(SELECT * FROM t"
+        self.assertEqual(remove_outer_parentheses(sql), "(SELECT * FROM t")
+
+        sql2 = "SELECT * FROM t)"
+        self.assertEqual(remove_outer_parentheses(sql2), "SELECT * FROM t)")
+
+    def test_not_full_statement(self):
+        """Should not remove parentheses if they don't enclose the entire statement."""
+        sql = "(SELECT a) UNION (SELECT b)"
+        self.assertEqual(remove_outer_parentheses(sql), "(SELECT a) UNION (SELECT b)")
+
+    def test_parentheses_inside_strings(self):
+        """Should not be confused by parentheses inside quoted strings."""
+        # The string starts with ( and ends with ), but the parentheses do not match each other structurally at the top level
+        sql = "('()')"
+        self.assertEqual(remove_outer_parentheses(sql), "'()'")
+
+    def test_empty_string(self):
+        """Should handle empty strings and whitespace correctly."""
+        self.assertEqual(remove_outer_parentheses(""), "")
+        self.assertEqual(remove_outer_parentheses("()"), "")
+        self.assertEqual(remove_outer_parentheses(" ( ) "), "")
 
 if __name__ == '__main__':
     unittest.main()
