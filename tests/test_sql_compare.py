@@ -410,43 +410,34 @@ class TestSecurity(unittest.TestCase):
 
 
 class TestReadFromStdinTwoParts(unittest.TestCase):
+class TestReadFromStdinTwoParts(unittest.TestCase):
     @patch('sys.stdin.read')
-    def test_valid_input_two_parts(self, mock_stdin_read):
-    def test_valid_input_two_parts(self, mock_stdin_read):
-        """Valid input with exactly two parts separated by '---'."""
-        mock_stdin_read.return_value = "part1\n---\npart2"
-        part1, part2 = read_from_stdin_two_parts()
-        self.assertEqual(part1, "part1")
-        self.assertEqual(part2, "part2")
+    def test_valid_inputs(self, mock_stdin_read):
+        """Tests valid inputs are parsed correctly."""
+        test_cases = [
+            ("Basic case with two parts", "part1\n---\npart2", "part1", "part2"),
+            ("Whitespace is stripped", "  SELECT * FROM A  \n  ---  \n  SELECT * FROM B  ", "SELECT * FROM A", "SELECT * FROM B"),
+        ]
+        for description, stdin_value, expected1, expected2 in test_cases:
+            with self.subTest(description=description):
+                mock_stdin_read.return_value = stdin_value
+                part1, part2 = read_from_stdin_two_parts()
+                self.assertEqual(part1, expected1)
+                self.assertEqual(part2, expected2)
 
     @patch('sys.stdin.read')
-    def test_valid_input_with_whitespace(self, mock_stdin_read):
-        """Whitespace around '---' and parts is stripped correctly."""
-        mock_stdin_read.return_value = "  SELECT * FROM A  \n  ---  \n  SELECT * FROM B  "
-        part1, part2 = read_from_stdin_two_parts()
-        self.assertEqual(part1, "SELECT * FROM A")
-        self.assertEqual(part2, "SELECT * FROM B")
-
-    @patch('sys.stdin.read')
-    def test_missing_separator_raises_value_error(self, mock_stdin_read):
-        """Input with no '---' separator raises ValueError."""
-        mock_stdin_read.return_value = "part1\npart2"
-        with self.assertRaisesRegex(ValueError, "exactly two parts"):
-            read_from_stdin_two_parts()
-
-    @patch('sys.stdin.read')
-    def test_empty_input_raises_value_error(self, mock_stdin_read):
-        """Empty input raises ValueError."""
-        mock_stdin_read.return_value = ""
-        with self.assertRaisesRegex(ValueError, "exactly two parts"):
-            read_from_stdin_two_parts()
-
-    @patch('sys.stdin.read')
-    def test_multiple_separators_raises_value_error(self, mock_stdin_read):
-        """Input with multiple '---' separators raises ValueError."""
-        mock_stdin_read.return_value = "part1\n---\npart2\n---\npart3"
-        with self.assertRaisesRegex(ValueError, "exactly two parts"):
-            read_from_stdin_two_parts()
+    def test_invalid_inputs_raise_value_error(self, mock_stdin_read):
+        """Tests that invalid inputs raise ValueError."""
+        test_cases = [
+            ("Missing separator", "part1\npart2"),
+            ("Empty input", ""),
+            ("Multiple separators", "part1\n---\npart2\n---\npart3"),
+        ]
+        for description, stdin_value in test_cases:
+            with self.subTest(description=description):
+                mock_stdin_read.return_value = stdin_value
+                with self.assertRaisesRegex(ValueError, "exactly two parts"):
+                    read_from_stdin_two_parts()
 
 
 if __name__ == '__main__':
