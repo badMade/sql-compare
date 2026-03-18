@@ -408,9 +408,6 @@ class TestSecurity(unittest.TestCase):
             os.unlink(tmp_path)
 
 
-if __name__ == '__main__':
-    unittest.main()
-
 class TestSplitTopLevel(unittest.TestCase):
     def test_basic_split(self):
         self.assertEqual(split_top_level("A, B, C", ","), ["A", "B", "C"])
@@ -473,10 +470,8 @@ class TestSplitTopLevel(unittest.TestCase):
         # We simulate the calling side passing `sep` correctly case-insensitively, or we test that it only splits exactly case-sensitively based on the current implementation.
         # The current implementation uses `s.startswith(sep, i)`, which is case-sensitive.
         # So we should verify case-sensitive behavior here.
-        test_cases = [
-            ("mixed case separator not matched", "A and B AND C", " AND ", ["A and B", "C"]),
-            ("matching case separator matched", "A AND B AND C", " AND ", ["A", "B", "C"]),
-        ]
-        for description, sql, sep, expected in test_cases:
-            with self.subTest(description=description):
-                self.assertEqual(split_top_level(sql, sep), expected)
+        self.assertEqual(split_top_level("A and B AND C", " AND "), ["A and B", "C"])
+        self.assertEqual(split_top_level("A AND B AND C", " AND "), ["A", "B", "C"])
+
+if __name__ == '__main__':
+    unittest.main()
