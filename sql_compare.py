@@ -84,10 +84,10 @@ def collapse_whitespace(s: str) -> str:
 
 QUOTED_STRING_REGEX = re.compile(
     r"""
-    '(?:''|[^'])*(?:'|$)
-  | "(?:""|[^"])*(?:"|$)
-  | \[[^\]]*(?:\]|$)
-  | `[^`]*(?:`|$)
+    '(?:''|[^'])*(?:'|$)      # Single-quoted strings, handles '' escape and unclosed
+    | "(?:""|[^"])*(?:"|$)      # Double-quoted strings, handles "" escape and unclosed
+    | \[[^\]]*(?:\]|$)          # MS SQL-style [bracketed] identifiers, handles unclosed
+    | `[^`]*(?:`|$)            # MySQL-style `backticked` identifiers, handles unclosed
     """,
     re.VERBOSE
 )
