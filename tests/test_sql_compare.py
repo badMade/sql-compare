@@ -440,9 +440,9 @@ class TestCanonicalizeSelectList(unittest.TestCase):
              "WITH cte AS (SELECT 1) SELECT b, a FROM t",
              "WITH cte AS (SELECT 1) SELECT a, b FROM t"),
 
-            ("SELECT DISTINCT (current behavior extracts DISTINCT as part of first item)",
+            ("SELECT DISTINCT (should be handled correctly)",
              "SELECT DISTINCT b, a FROM t",
-             "SELECT a, DISTINCT b FROM t"), # current behavior check
+             "SELECT DISTINCT a, b FROM t"),
 
             ("Subqueries in SELECT list",
              "SELECT (SELECT b FROM t2), a FROM t",
