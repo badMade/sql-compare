@@ -371,14 +371,10 @@ def canonicalize_where_and(sql: str) -> str:
 FROM_BODY_TOKENIZER_RE = re.compile(
     r"""
     (
-        '(?:''|[^'])*'            # single quotes
-      | "(?:""|[^"])*"            # double quotes
-      | \[[^\]]*\]                # brackets
-      | `[^`]*`                   # backticks
-      | '(?:''|[^'])*             # unclosed single quote
-      | "(?:""|[^"])*             # unclosed double quote
-      | \[[^\]]*                  # unclosed bracket
-      | `[^`]*                    # unclosed backtick
+        '(?:''|[^'])*'?            # single quotes (closed or unclosed)
+      | "(?:""|[^"])*"?            # double quotes (closed or unclosed)
+      | \[[^\]]*\]?                # brackets (closed or unclosed)
+      | `[^`]*`?                   # backticks (closed or unclosed)
     )
     | (\()                        # Open paren (group 2)
     | (\))                        # Close paren (group 3)
