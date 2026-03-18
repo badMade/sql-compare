@@ -755,7 +755,9 @@ def parse_args(argv):
 
 
 def read_from_stdin_two_parts():
-    raw = sys.stdin.read()
+    raw = sys.stdin.read(MAX_FILE_SIZE_BYTES + 1)
+    if len(raw) > MAX_FILE_SIZE_BYTES:
+        raise ValueError(f"Input too large: stdin exceeds {MAX_FILE_SIZE_MB} MB limit.")
     parts = re.split(r"^\s*---\s*$", raw, flags=re.M)
     if len(parts) != 2:
         raise ValueError("When using --stdin, provide exactly two parts separated by a line containing only ---")
@@ -982,7 +984,17 @@ class SQLCompareGUI:
         yscroll.grid(row=0, column=1, sticky="ns")
         xscroll.grid(row=1, column=0, sticky="ew")
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
-        self.txt.insert("1.0", "Select files and click Compare to see results here.")
+
+        def _readonly_handler(event):
+            if event.keysym in ('Up', 'Down', 'Left', 'Right', 'Prior', 'Next', 'Home', 'End'):
+                return None
+            if event.keysym.lower() in ('c', 'a') and (event.state & 4 or event.state & 8):
+                return None
+            return "break"
+
+        self.txt.bind("<Key>", _readonly_handler)
+        self.txt.tag_configure("empty", foreground="gray", justify="center")
+        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
 
     def _toggle_join_options(self):
         # Enable/disable dependent flags based on global join toggle
@@ -1005,7 +1017,7 @@ class SQLCompareGUI:
 
     def clear_output(self):
         self.txt.delete("1.0", "end")
-        self.txt.insert("1.0", "Select files and click Compare to see results here.")
+        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
         self.btn_copy.state(['disabled'])
         self.btn_clear.state(['disabled'])
         self.btn_save.state(['disabled'])

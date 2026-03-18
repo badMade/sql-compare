@@ -1,4 +1,5 @@
+## 2024-05-24 - Fast regex lookahead in parsing loops
 
-## 2024-03-13 - [Performance] O(N^2) slowdowns from character-by-character loops with regex slicing
-**Learning:** In Python, performing character-by-character iteration while simultaneously calling `re.match(pattern, string[i:])` creates an O(N^2) performance bottleneck due to continuous string slicing and redundant regex engine invocations. This is especially true for SQL string tokenization where checking for keywords character-by-character can be devastatingly slow on long inputs.
-**Action:** Replace linear `while` loops containing string slicing (`string[i:]`) with a single, comprehensive compiled regex and use `re.finditer` to scan the string in O(N) time. The regex should leverage capturing groups to handle state transitions (like entering/exiting quoted strings or parentheses) and keyword extraction simultaneously.
+**Learning:** Character-by-character parsing loops (like `top_level_find_kw`) that repeatedly slice strings for regex checks (`re.match(pattern, string[i:])`) create severe O(N²) performance bottlenecks due to constant string allocation on large files, which is particularly detrimental when parsing large, generated SQL strings.
+
+**Action:** To optimize state-tracking text parsing loops (e.g., checking quotes or nesting levels), use `re.finditer` for fast regex lookahead to jump directly to candidate match indices. Then, advance the state-machine up to that exact index to validate it, bypassing expensive linear scanning and O(N²) string slicing.
