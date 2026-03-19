@@ -2,7 +2,7 @@ import unittest
 import argparse
 from unittest.mock import patch
 from sql_compare import (
-    canonicalize_joins, clause_end_index, tokenize,
+    canonicalize_joins, clause_end_index, tokenize, canonicalize_select_list,
     strip_sql_comments, uppercase_outside_quotes,
     top_level_find_kw, collapse_whitespace,
     _tokenize_from_clause_body, split_top_level,
@@ -679,6 +679,41 @@ class TestSecurity(unittest.TestCase):
         finally:
             os.unlink(tmp_path)
 
+
+
+
+class TestCanonicalizeSelectList(unittest.TestCase):
+    def test_basic_sorting(self):
+        sql = "SELECT c, a, b FROM t"
+        expected = "SELECT a, b, c FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
+
+    def test_case_insensitivity(self):
+        sql = "SELECT B, a, c FROM t"
+        expected = "SELECT a, B, c FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
+
+    def test_single_item(self):
+        sql = "SELECT a FROM t"
+        expected = "SELECT a FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
+
+    def test_aliases(self):
+        sql = "SELECT col2 AS b, col1 AS a FROM t"
+        expected = "SELECT col1 AS a, col2 AS b FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
+
+    def test_string_literals_with_commas(self):
+        sql = "SELECT 'b, c' AS string1, 'a' AS string2 FROM t"
+        expected = "SELECT 'a' AS string2, 'b, c' AS string1 FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
+
+    def test_distinct_keyword_suboptimal_sorting(self):
+        # DISTINCT is treated as part of the first item: "DISTINCT b"
+        # So "DISTINCT b" sorts after "a"
+        sql = "SELECT DISTINCT b, a FROM t"
+        expected = "SELECT a, DISTINCT b FROM t"
+        self.assertEqual(canonicalize_select_list(sql), expected)
 
 
 if __name__ == '__main__':
