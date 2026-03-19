@@ -2,6 +2,7 @@ import unittest
 import argparse
 from unittest.mock import patch
 from sql_compare import (
+    _extract_base_table,
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
     top_level_find_kw, collapse_whitespace,
@@ -680,6 +681,37 @@ class TestSecurity(unittest.TestCase):
             os.unlink(tmp_path)
 
 
+
+
+class TestExtractBaseTable(unittest.TestCase):
+    def test_empty_tokens(self):
+        result, idx = _extract_base_table([])
+        self.assertEqual(result, "")
+        self.assertEqual(idx, 0)
+
+    def test_single_text_token(self):
+        tokens = [("TEXT", "table_a")]
+        result, idx = _extract_base_table(tokens)
+        self.assertEqual(result, "table_a")
+        self.assertEqual(idx, 1)
+
+    def test_multiple_text_tokens(self):
+        tokens = [("TEXT", "table_a"), ("TEXT", "AS"), ("TEXT", "a")]
+        result, idx = _extract_base_table(tokens)
+        self.assertEqual(result, "table_a AS a")
+        self.assertEqual(idx, 3)
+
+    def test_stops_at_joinkw(self):
+        tokens = [("TEXT", "table_a"), ("JOINKW", "INNER JOIN"), ("TEXT", "table_b")]
+        result, idx = _extract_base_table(tokens)
+        self.assertEqual(result, "table_a")
+        self.assertEqual(idx, 1)
+
+    def test_whitespace_stripping(self):
+        tokens = [("TEXT", "  table_a  "), ("TEXT", "  AS  "), ("TEXT", "  a  ")]
+        result, idx = _extract_base_table(tokens)
+        self.assertEqual(result, "table_a   AS   a")
+        self.assertEqual(idx, 3)
 
 if __name__ == '__main__':
     unittest.main()
