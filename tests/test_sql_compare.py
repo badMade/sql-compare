@@ -401,6 +401,7 @@ class TestStripSqlComments(unittest.TestCase):
         test_cases = [
             ("single-quoted line comment", "SELECT 'This is -- not a comment' FROM my_table;"),
             ("single-quoted block comment", "SELECT 'This is /* not a comment */' FROM my_table;"),
+            ("single-quoted with escaped quote", "SELECT 'This is -- not a '' comment' FROM my_table;"),
             ("double-quoted line comment", 'SELECT "-- not a comment" FROM my_table;'),
             ("double-quoted block comment", 'SELECT "/* not a comment */" FROM my_table;'),
             ("backtick-quoted line comment", "SELECT `-- not a comment` FROM my_table;"),
