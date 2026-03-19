@@ -78,11 +78,11 @@ def strip_sql_comments(s: str) -> str:
 
     while i < n:
         if mode is None:
-            if s[i:i+2] == '/*':
+            if s.startswith('/*', i):
                 end = s.find('*/', i + 2)
                 i = end + 2 if end != -1 else n
                 continue
-            if s[i:i+2] == '--':
+            if s.startswith('--', i):
                 end = s.find('\n', i + 2)
                 i = end if end != -1 else n
                 continue
