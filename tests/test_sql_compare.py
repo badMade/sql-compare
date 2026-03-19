@@ -396,8 +396,8 @@ class TestStripSqlComments(unittest.TestCase):
         expected = "SELECT  * FROM my_table;"
         self.assertEqual(strip_sql_comments(sql), expected)
 
-    def test_comment_like_sequences_in_strings(self):
-        """Ensures comment-like sequences in quoted SQL literals are not stripped."""
+    def test_comment_like_sequences_in_strings_and_identifiers(self):
+        """Ensures comment-like sequences in quoted SQL literals and identifiers are not stripped."""
         test_cases = [
             ("single-quoted line comment", "SELECT 'This is -- not a comment' FROM my_table;"),
             ("single-quoted block comment", "SELECT 'This is /* not a comment */' FROM my_table;"),
