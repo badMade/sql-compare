@@ -2,7 +2,7 @@ import unittest
 import argparse
 from unittest.mock import patch
 from sql_compare import (
-    canonicalize_joins, clause_end_index, tokenize,
+    canonicalize_joins, clause_end_index, tokenize, canonicalize_select_list,
     strip_sql_comments, uppercase_outside_quotes,
     top_level_find_kw, collapse_whitespace,
     _tokenize_from_clause_body, split_top_level,
@@ -679,6 +679,25 @@ class TestSecurity(unittest.TestCase):
         finally:
             os.unlink(tmp_path)
 
+
+
+
+class TestCanonicalizeSelectList(unittest.TestCase):
+    def test_canonicalize_select_list(self):
+        test_cases = [
+            ("basic sorting", "SELECT c, a, b FROM t", "SELECT a, b, c FROM t"),
+            ("case insensitivity", "SELECT B, a, c FROM t", "SELECT a, B, c FROM t"),
+            ("single item", "SELECT a FROM t", "SELECT a FROM t"),
+            ("aliases", "SELECT col2 AS b, col1 AS a FROM t", "SELECT col1 AS a, col2 AS b FROM t"),
+            ("string literals with commas", "SELECT 'b, c' AS string1, 'a' AS string2 FROM t", "SELECT 'a' AS string2, 'b, c' AS string1 FROM t"),
+            # DISTINCT is treated as part of the first item: "DISTINCT b"
+            # So "DISTINCT b" sorts after "a"
+            ("distinct keyword suboptimal sorting", "SELECT DISTINCT b, a FROM t", "SELECT a, DISTINCT b FROM t"),
+        ]
+
+        for description, sql, expected in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(canonicalize_select_list(sql), expected)
 
 
 if __name__ == '__main__':
