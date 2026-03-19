@@ -78,11 +78,11 @@ def strip_sql_comments(s: str) -> str:
 
     while i < n:
         if mode is None:
-            if s.startswith('/*', i):
+            if s[i:i+2] == '/*':
                 end = s.find('*/', i + 2)
                 i = end + 2 if end != -1 else n
                 continue
-            if s.startswith('--', i):
+            if s[i:i+2] == '--':
                 end = s.find('\n', i + 2)
                 i = end if end != -1 else n
                 continue
@@ -110,8 +110,20 @@ def strip_sql_comments(s: str) -> str:
                     continue
                 else:
                     mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
+            elif mode == 'bracket' and ch == ']':
+                if i + 1 < n and s[i + 1] == ']':
+                    out.append(']]')
+                    i += 2
+                    continue
+                else:
+                    mode = None
+            elif mode == 'backtick' and ch == '`':
+                if i + 1 < n and s[i + 1] == '`':
+                    out.append('``')
+                    i += 2
+                    continue
+                else:
+                    mode = None
             out.append(ch)
             i += 1
     return "".join(out)
@@ -242,8 +254,12 @@ def _advance_state(text: str, frm: int, to: int, mode: str, level: int):
             elif mode == 'double' and ch == '"':
                 if i + 1 < len(text) and text[i + 1] == '"': i += 1
                 else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
+            elif mode == 'bracket' and ch == ']':
+                if i + 1 < len(text) and text[i + 1] == ']': i += 1
+                else: mode = None
+            elif mode == 'backtick' and ch == '`':
+                if i + 1 < len(text) and text[i + 1] == '`': i += 1
+                else: mode = None
         i += 1
     return mode, level
 
