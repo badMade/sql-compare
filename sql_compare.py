@@ -310,8 +310,7 @@ def ws_only_normalize(sql: str) -> str:
     return remove_trailing_semicolon(collapse_whitespace(sql))
 
 
-def canonicalize_select_list(sql: str) -> str:
-    s = collapse_whitespace(sql)
+def _canonicalize_select_list(s: str) -> str:
     sel_i = top_level_find_kw(s, "SELECT", 0)
     if sel_i == -1: return s
     from_i = top_level_find_kw(s, "FROM", sel_i + 6)
@@ -321,11 +320,13 @@ def canonicalize_select_list(sql: str) -> str:
     if len(items) > 1:
         items_sorted = sorted([collapse_whitespace(it) for it in items], key=lambda z: z.upper())
         s = s[:sel_i + 6] + " " + ", ".join(items_sorted) + " " + s[from_i:]
-    return collapse_whitespace(s)
+    return s
+
+def canonicalize_select_list(sql: str) -> str:
+    return collapse_whitespace(_canonicalize_select_list(collapse_whitespace(sql)))
 
 
-def canonicalize_where_and(sql: str) -> str:
-    s = collapse_whitespace(sql)
+def _canonicalize_where_and(s: str) -> str:
     where_i = top_level_find_kw(s, "WHERE", 0)
     if where_i == -1: return s
     end_i = clause_end_index(s, where_i + 5)
@@ -335,7 +336,10 @@ def canonicalize_where_and(sql: str) -> str:
         terms_sorted = sorted([collapse_whitespace(t) for t in terms], key=lambda z: z.upper())
         new_body = " AND ".join(terms_sorted)
         s = s[:where_i + 5] + " " + new_body + " " + s[end_i:]
-    return collapse_whitespace(s)
+    return s
+
+def canonicalize_where_and(sql: str) -> str:
+    return collapse_whitespace(_canonicalize_where_and(collapse_whitespace(sql)))
 
 
 FROM_BODY_TOKENIZER_RE = re.compile(
@@ -481,7 +485,7 @@ def _rebuild_from_body(base: str, segments: list) -> str:
     return " ".join(parts)
 
 
-def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: bool = False) -> str:
+def _canonicalize_joins(s: str, allow_full_outer: bool = False, allow_left: bool = False) -> str:
     """
     Canonicalize top-level FROM JOIN chains by sorting contiguous runs of:
       - INNER/CROSS/NATURAL joins (always when join reordering is enabled)
@@ -489,7 +493,6 @@ def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: boo
       - LEFT joins (only when allow_left=True)
     RIGHT joins are preserved (not commutative). FULL/LEFT also preserved unless explicitly allowed.
     """
-    s = collapse_whitespace(sql)
     from_i = top_level_find_kw(s, "FROM", 0)
     if from_i == -1:
         return s
@@ -525,15 +528,18 @@ def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: boo
     s2 = s[:from_i + 4] + " " + rebuilt + " " + s[end_i:]
     return collapse_whitespace(s2)
 
+def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: bool = False) -> str:
+    return collapse_whitespace(_canonicalize_joins(collapse_whitespace(sql), allow_full_outer=allow_full_outer, allow_left=allow_left))
+
 
 def canonicalize_common(sql: str, *, enable_join_reorder: bool = True, allow_full_outer: bool = False, allow_left: bool = False) -> str:
     """Apply canonicalizations: SELECT list, WHERE AND-terms, and (optionally) JOIN reordering."""
     s = collapse_whitespace(sql)
-    s = canonicalize_select_list(s)
-    s = canonicalize_where_and(s)
+    s = _canonicalize_select_list(s)
+    s = _canonicalize_where_and(s)
     if enable_join_reorder:
-        s = canonicalize_joins(s, allow_full_outer=allow_full_outer, allow_left=allow_left)
-    return collapse_whitespace(s)
+        s = _canonicalize_joins(s, allow_full_outer=allow_full_outer, allow_left=allow_left)
+    return s
 
 
 # =============================
