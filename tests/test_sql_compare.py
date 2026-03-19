@@ -4,10 +4,10 @@ from unittest.mock import patch
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw, remove_outer_parentheses,
-    _extract_join_segments, collapse_whitespace,
+    top_level_find_kw, collapse_whitespace,
     _tokenize_from_clause_body, split_top_level,
 )
+
 
 
 class TestCollapseWhitespace(unittest.TestCase):
