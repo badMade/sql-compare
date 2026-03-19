@@ -83,27 +83,10 @@ SQL_COMMENT_OR_STRING_REGEX = re.compile(
 
 def strip_sql_comments(s: str) -> str:
     """Remove -- line comments and /* ... */ block comments (non-nested)."""
-    out = []
-    prev = 0
-    for m in SQL_COMMENT_OR_STRING_REGEX.finditer(s):
-        start, end = m.span()
-        if start > prev:
-            out.append(s[prev:start])
-
-        token = m.group(0)
-        if token.startswith("--") or token.startswith("/*"):
-            # It's a comment, skip it (replace with empty string)
-            pass
-        else:
-            # It's a quoted string or identifier, keep it
-            out.append(token)
-
-        prev = end
-
-    if prev < len(s):
-        out.append(s[prev:])
-
-    return "".join(out)
+    return SQL_COMMENT_OR_STRING_REGEX.sub(
+        lambda m: "" if m.group(0).startswith(("--", "/*")) else m.group(0),
+        s
+    )
 
 
 def collapse_whitespace(s: str) -> str:
