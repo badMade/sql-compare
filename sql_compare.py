@@ -69,12 +69,41 @@ def safe_read_file(path_str: str) -> str:
 
     return p.read_text(encoding="utf-8", errors="ignore")
 
-def strip_sql_comments(s: str) -> str:
+SQL_COMMENT_OR_STRING_REGEX = re.compile(
+    r"""
+    '(?:''|[^'])*(?:'|$)        # Single-quoted strings
+    | "(?:""|[^"])*(?:"|$)      # Double-quoted strings
+    | \[[^\]]*(?:\]|$)          # MS SQL-style [bracketed] identifiers
+    | `[^`]*(?:`|$)             # MySQL-style `backticked` identifiers
+    | /\*.*?(?:\*/|$)           # Block comments (non-nested)
+    | --[^\n\r]*                # Single-line comments
+    """,
+    re.VERBOSE | re.DOTALL
+)
 
+def strip_sql_comments(s: str) -> str:
     """Remove -- line comments and /* ... */ block comments (non-nested)."""
-    s = re.sub(r"/\*.*?\*/", "", s, flags=re.S)
-    s = re.sub(r"--[^\n\r]*", "", s)
-    return s
+    out = []
+    prev = 0
+    for m in SQL_COMMENT_OR_STRING_REGEX.finditer(s):
+        start, end = m.span()
+        if start > prev:
+            out.append(s[prev:start])
+
+        token = m.group(0)
+        if token.startswith("--") or token.startswith("/*"):
+            # It's a comment, skip it (replace with empty string)
+            pass
+        else:
+            # It's a quoted string or identifier, keep it
+            out.append(token)
+
+        prev = end
+
+    if prev < len(s):
+        out.append(s[prev:])
+
+    return "".join(out)
 
 
 def collapse_whitespace(s: str) -> str:
