@@ -1,0 +1,39 @@
+name: Auto-assign reviewers
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  assign-reviewers:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Request reviewers
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const reviewers = ['Copilot', 'gemini-code-assist[bot]'];
+            const prNumber = context.payload.pull_request.number;
+            const prAuthor = context.payload.pull_request.user.login;
+
+            // Filter out the PR author to avoid self-review errors
+            const filteredReviewers = reviewers.filter(r => r.toLowerCase() !== prAuthor.toLowerCase());
+
+            if (filteredReviewers.length === 0) {
+              console.log('No reviewers to assign (all filtered out).');
+              return;
+            }
+
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                reviewers: filteredReviewers,
+              });
+              console.log(`Requested reviews from: ${filteredReviewers.join(', ')}`);
+            } catch (error) {
+              console.error(`Failed to assign reviewers: ${error.message}`);
+            }
