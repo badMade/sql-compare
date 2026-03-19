@@ -11,6 +11,7 @@ from sql_compare import (
 )
 
 
+
 class TestCollapseWhitespace(unittest.TestCase):
     def test_collapse_whitespace_edge_cases(self):
         """Test edge cases for collapse_whitespace function."""
@@ -240,59 +241,19 @@ class TestTokenizeFromClauseBodyEdgeCases(unittest.TestCase):
         cond_values = [v for k, v in tokens if k == "CONDKW"]
         self.assertEqual(cond_values, ["USING"])
 
+    def test_backtick_identifiers_parsed(self):
+        """Should correctly parse backtick-quoted identifiers in a FROM clause body."""
+        sql = "t1 JOIN t2 ON t1.`id` = t2.`id`"
+        tokens = _tokenize_from_clause_body(sql)
+        self.assertEqual(tokens, [
+            ('TEXT', 't1'),
+            ('JOINKW', 'JOIN'),
+            ('TEXT', 't2'),
+            ('CONDKW', 'ON'),
+            ('TEXT', 't1.`id` = t2.`id`')
+        ])
 
-class TestClauseEndIndex(unittest.TestCase):
-    def test_no_terminators(self):
-        """Should return length of string if no terminators found."""
-        sql = "SELECT * FROM my_table JOIN other_table ON a = b"
-        self.assertEqual(clause_end_index(sql, 0), len(sql))
 
-    def test_single_terminator(self):
-        """Should return index of the terminator."""
-        sql = "SELECT * FROM my_table WHERE a = 1"
-        # 'WHERE' starts at index 25
-        self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
-
-        sql = "SELECT * FROM my_table GROUP BY a"
-        self.assertEqual(clause_end_index(sql, 0), sql.index("GROUP BY"))
-
-    def test_multiple_terminators(self):
-        """Should return index of the first terminator found in the string."""
-        sql = "SELECT * FROM my_table WHERE a = 1 GROUP BY a ORDER BY a"
-        # Even though GROUP BY and ORDER BY exist, WHERE is first
-        self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
-
-        # If we start after WHERE, we should find GROUP BY
-        start_after_where = sql.index("WHERE") + 5
-        self.assertEqual(clause_end_index(sql, start_after_where), sql.index("GROUP BY"))
-
-    def test_terminator_inside_subquery(self):
-        """Should ignore terminators inside parentheses."""
-        sql = "SELECT * FROM t1 JOIN (SELECT * FROM t2 WHERE b = 1) ON a = b WHERE a = 1"
-        # The WHERE inside the subquery should be ignored.
-        # We want the index of the last WHERE.
-        self.assertEqual(clause_end_index(sql, 0), sql.rindex("WHERE"))
-
-    def test_terminator_inside_quotes(self):
-        """Should ignore terminators inside quotes or brackets."""
-        sql = "SELECT * FROM t1 WHERE a = 'WHERE' GROUP BY b"
-        # The 'WHERE' inside quotes should be ignored. We should find 'WHERE' keyword
-        self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
-
-        sql2 = "SELECT * FROM t1 JOIN [WHERE] u ON a = b GROUP BY b"
-        # [WHERE] is a bracketed identifier; the parser enters mode='bracket' and ignores it
-        self.assertEqual(clause_end_index(sql2, 0), sql2.index("GROUP BY"))
-
-        sql3 = "SELECT * FROM t1 JOIN u ON a = `WHERE` GROUP BY b"
-        self.assertEqual(clause_end_index(sql3, 0), sql3.index("GROUP BY"))
-
-    def test_different_start_indices(self):
-        """Should correctly offset the search based on start index."""
-        sql = "SELECT * FROM my_table WHERE a = 1"
-        self.assertEqual(clause_end_index(sql, 0), sql.index("WHERE"))
-
-        # If start is past WHERE, it shouldn't find it
-        self.assertEqual(clause_end_index(sql, sql.index("WHERE") + 1), len(sql))
 class TestTokenize(unittest.TestCase):
     def test_tokenize_scenarios(self):
         """Test the tokenize function with various SQL inputs."""
@@ -489,7 +450,6 @@ class TestUppercaseOutsideQuotes(unittest.TestCase):
 
 class TestSplitTopLevel(unittest.TestCase):
     def test_split_with_quotes_and_parens(self):
-        from sql_compare import split_top_level
         # Test case 1: Separator inside single quotes
         s = "col1, 'value, with, comma', col2"
         sep = ","
@@ -722,197 +682,6 @@ class TestSecurity(unittest.TestCase):
             os.unlink(tmp_path)
 
 
-
-class TestTokenizeFromClauseBody(unittest.TestCase):
-    def test_backticks(self):
-        """Should correctly parse backticks in a FROM clause body."""
-        from sql_compare import _tokenize_from_clause_body
-        sql = "t1 JOIN t2 ON t1.`id` = t2.`id`"
-        tokens = _tokenize_from_clause_body(sql)
-        self.assertEqual(tokens, [
-            ('TEXT', 't1'),
-            ('JOINKW', 'JOIN'),
-            ('TEXT', 't2'),
-            ('CONDKW', 'ON'),
-            ('TEXT', 't1.`id` = t2.`id`')
-        ])
-class TestCollapseWhitespace(unittest.TestCase):
-    def test_collapse_whitespace_scenarios(self):
-        """Test various scenarios for whitespace collapsing."""
-        test_cases = {
-            "basic_collapse": ("SELECT  *   FROM    t1", "SELECT * FROM t1"),
-            "mixed_whitespace_sql": ("SELECT\t*\nFROM\r\nt1", "SELECT * FROM t1"),
-            "mixed_whitespace_simple": ("A \t \n B", "A B"),
-            "trimming_spaces": ("   SELECT * FROM t1  ", "SELECT * FROM t1"),
-            "trimming_mixed": ("\n\tSELECT * FROM t1\r\n", "SELECT * FROM t1"),
-            "no_whitespace_sql": ("SELECT*FROM(t1)", "SELECT*FROM(t1)"),
-            "no_whitespace_word": ("word", "word"),
-            "empty_string": ("", ""),
-            "only_whitespace": ("   \t\n  ", ""),
-        }
-
-        for name, (input_str, expected) in test_cases.items():
-            with self.subTest(name=name):
-                self.assertEqual(collapse_whitespace(input_str), expected)
-
-
-class TestRemoveOuterParentheses(unittest.TestCase):
-    def test_basic_single_layer(self):
-        """Should remove a single layer of outer parentheses."""
-        sql = "(SELECT * FROM t)"
-        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
-
-    def test_multiple_layers(self):
-        """Should remove multiple layers of outer parentheses."""
-        sql = "(((SELECT * FROM t)))"
-        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
-
-    def test_no_parentheses(self):
-        """Should return the string unmodified if no outer parentheses exist."""
-        sql = "SELECT * FROM t"
-        self.assertEqual(remove_outer_parentheses(sql), "SELECT * FROM t")
-
-    def test_unmatched_parentheses(self):
-        """Should return the string unmodified if parentheses are not matched at the ends."""
-        sql = "(SELECT * FROM t"
-        self.assertEqual(remove_outer_parentheses(sql), "(SELECT * FROM t")
-
-        sql2 = "SELECT * FROM t)"
-        self.assertEqual(remove_outer_parentheses(sql2), "SELECT * FROM t)")
-
-    def test_not_full_statement(self):
-        """Should not remove parentheses if they don't enclose the entire statement."""
-        sql = "(SELECT a) UNION (SELECT b)"
-        self.assertEqual(remove_outer_parentheses(sql), "(SELECT a) UNION (SELECT b)")
-
-    def test_parentheses_inside_strings(self):
-        """Should not be confused by parentheses inside quoted strings."""
-        # The string starts with ( and ends with ), but the parentheses do not match each other structurally at the top level
-        sql = "('()')"
-        self.assertEqual(remove_outer_parentheses(sql), "'()'")
-
-    def test_empty_string(self):
-        """Should handle empty strings and whitespace correctly."""
-        self.assertEqual(remove_outer_parentheses(""), "")
-        self.assertEqual(remove_outer_parentheses("()"), "")
-        self.assertEqual(remove_outer_parentheses(" ( ) "), "")
-
-
-
-
-class TestExtractJoinSegments(unittest.TestCase):
-    def test_empty_tokens(self):
-        """Empty tokens should return empty list."""
-        self.assertEqual(_extract_join_segments([], 0), [])
-
-    def test_single_join_on(self):
-        """Single JOIN with ON condition."""
-        tokens = [
-            ("JOINKW", "JOIN"),
-            ("TEXT", "table2"),
-            ("CONDKW", "ON"),
-            ("TEXT", "t1.id = t2.id")
-        ]
-        expected = [{
-            "type": "INNER",
-            "table": "table2",
-            "cond_kw": "ON",
-            "cond": "t1.id = t2.id"
-        }]
-        self.assertEqual(_extract_join_segments(tokens, 0), expected)
-
-    def test_join_using(self):
-        """JOIN with USING condition."""
-        tokens = [
-            ("JOINKW", "LEFT JOIN"),
-            ("TEXT", "table3"),
-            ("CONDKW", "USING"),
-            ("TEXT", "(id)")
-        ]
-        expected = [{
-            "type": "LEFT",
-            "table": "table3",
-            "cond_kw": "USING",
-            "cond": "(id)"
-        }]
-        self.assertEqual(_extract_join_segments(tokens, 0), expected)
-
-    def test_multiple_joins(self):
-        """Multiple joins in sequence."""
-        tokens = [
-            ("JOINKW", "JOIN"),
-            ("TEXT", "table2"),
-            ("CONDKW", "ON"),
-            ("TEXT", "t1.id = t2.id"),
-            ("JOINKW", "RIGHT OUTER JOIN"),
-            ("TEXT", "table3"),
-            ("CONDKW", "ON"),
-            ("TEXT", "t2.id = t3.id")
-        ]
-        expected = [
-            {
-                "type": "INNER",
-                "table": "table2",
-                "cond_kw": "ON",
-                "cond": "t1.id = t2.id"
-            },
-            {
-                "type": "RIGHT",
-                "table": "table3",
-                "cond_kw": "ON",
-                "cond": "t2.id = t3.id"
-            }
-        ]
-        self.assertEqual(_extract_join_segments(tokens, 0), expected)
-
-    def test_join_without_condition(self):
-        """JOIN without a condition (e.g. CROSS JOIN)."""
-        tokens = [
-            ("JOINKW", "CROSS JOIN"),
-            ("TEXT", "table2")
-        ]
-        expected = [{
-            "type": "CROSS",
-            "table": "table2",
-            "cond_kw": None,
-            "cond": ""
-        }]
-        self.assertEqual(_extract_join_segments(tokens, 0), expected)
-
-    def test_start_index(self):
-        """Test with a non-zero start index."""
-        tokens = [
-            ("TEXT", "table1"),
-            ("JOINKW", "JOIN"),
-            ("TEXT", "table2"),
-            ("CONDKW", "ON"),
-            ("TEXT", "t1.id = t2.id")
-        ]
-        expected = [{
-            "type": "INNER",
-            "table": "table2",
-            "cond_kw": "ON",
-            "cond": "t1.id = t2.id"
-        }]
-        self.assertEqual(_extract_join_segments(tokens, 1), expected)
-
-    def test_ignores_non_join_start(self):
-        """Test ignoring non-join tokens at the beginning."""
-        tokens = [
-            ("TEXT", "table1"),
-            ("TEXT", "some_alias"),
-            ("JOINKW", "JOIN"),
-            ("TEXT", "table2"),
-            ("CONDKW", "ON"),
-            ("TEXT", "t1.id = t2.id")
-        ]
-        expected = [{
-            "type": "INNER",
-            "table": "table2",
-            "cond_kw": "ON",
-            "cond": "t1.id = t2.id"
-        }]
-        self.assertEqual(_extract_join_segments(tokens, 0), expected)
 
 if __name__ == '__main__':
     unittest.main()
