@@ -83,8 +83,13 @@ def strip_sql_comments(s: str) -> str:
                 i = end + 2 if end != -1 else n
                 continue
             if s[i:i+2] == '--':
-                end = s.find('\n', i + 2)
-                i = end if end != -1 else n
+                end_n = s.find('\n', i + 2)
+                end_r = s.find('\r', i + 2)
+                candidates = [pos for pos in (end_n, end_r) if pos != -1]
+                if candidates:
+                    i = min(candidates)
+                else:
+                    i = n
                 continue
 
             ch = s[i]
