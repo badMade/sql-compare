@@ -13,7 +13,8 @@ jobs:
     if: |
       (
         github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review')
       ) || (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
         (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
@@ -27,13 +28,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          # fetch-depth: 0 fetches the full commit history, required to accurately compute diffs across branches
           fetch-depth: 0
 
-      - name: Get PR diff
-        id: diff
+      - name: Review PR with Gemini
         uses: actions/github-script@v7
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         with:
           script: |
+            const apiKey = process.env.GOOGLE_API_KEY;
+            if (!apiKey) {
+              core.warning('Missing GOOGLE_API_KEY secret — skipping Gemini review.');
+              return;
+            }
+
             const prNumber = context.payload.pull_request?.number ||
               context.payload.issue?.number;
             if (!prNumber) {
@@ -42,40 +51,50 @@ jobs:
             }
 
             if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
-              console.log('Comment on a regular issue, skipping.');
+              core.info('Comment on a regular issue, skipping.');
               return;
             }
 
-            const { data: files } = await github.rest.pulls.listFiles({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              per_page: 100,
-            });
-            fs.writeFileSync(process.env.GITHUB_WORKSPACE + '/pr_diff.txt', diff);
+            // Paginate through all PR files (up to 10 pages of 100 files each)
+            let files = [];
+            for (let page = 1; page <= 10; page++) {
+              const { data: pageFiles } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                per_page: 100,
+                page,
+              });
+              files = files.concat(pageFiles);
+              if (pageFiles.length < 100) break;
+              if (page === 10) {
+                core.warning('PR has more than 1000 changed files; review will only cover the first 1000.');
+              }
+            }
 
-    if: |
-      secrets.GOOGLE_API_KEY != '' && (
-        (
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        ) || (
-          (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-          (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
-        )
-      )
-        with:
-          script: |
-            const diff = process.env.PR_DIFF || '';
-    if: |
-      (
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review')
-      ) || (
-        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
-      )
+            if (files.length === 0) {
+              core.info('No changed files found, skipping review.');
+              return;
+            }
+
+            const diff = files.map(f => {
+              const statusMap = { added: 'ADDED', modified: 'MODIFIED', removed: 'DELETED', renamed: 'RENAMED', copied: 'COPIED', changed: 'CHANGED', unchanged: 'UNCHANGED' };
+              const status = statusMap[f.status] || f.status.toUpperCase();
+              return `--- ${f.filename} (${status})\n${f.patch || '(binary or empty)'}`;
+            }).join('\n\n');
+
+            const geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+            const response = await fetch(
+              geminiUrl,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-goog-api-key': apiKey,
+                },
+                body: JSON.stringify({
+                  contents: [{
+                    parts: [{
                       text: `You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.\n\nPR Diff:\n${diff}`
                     }]
                   }],
@@ -83,6 +102,16 @@ jobs:
                 }),
               }
             );
+
+            if (!response.ok) {
+              const errorBody = await response.text();
+              if (response.status === 403) {
+                core.setFailed(`Gemini review request failed: Forbidden (403) at ${geminiUrl}. Check that GOOGLE_API_KEY is valid and has Gemini API access enabled.`);
+              } else {
+                core.setFailed(`Gemini review request failed (${response.status}) at ${geminiUrl}: ${errorBody}`);
+              }
+              return;
+            }
 
             const result = await response.json();
             const review = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate review.';
