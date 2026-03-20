@@ -52,11 +52,24 @@ jobs:
               return;
             }
 
-            const { data: pullRequest } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-            });
+            let pullRequest;
+            try {
+              const response = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
+              pullRequest = response.data;
+            } catch (error) {
+              if (error && error.status === 404) {
+                core.info(`Pull request #${prNumber} not found; skipping Jules review.`);
+                return;
+              }
+              const status = error && typeof error.status !== 'undefined' ? ` (status ${error.status})` : '';
+              const message = error && error.message ? `: ${error.message}` : '';
+              core.setFailed(`Failed to fetch pull request #${prNumber}${status}${message}`);
+              return;
+            }
 
             if (pullRequest.head.repo.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
               core.info('Pull request originates from a fork; skipping Jules review.');
