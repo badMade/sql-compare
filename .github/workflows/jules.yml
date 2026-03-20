@@ -13,10 +13,18 @@ jobs:
     if: |
       (
         github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review')
       ) || (
-        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        contains(github.event.comment.body, '@jules') &&
+        contains(github.event.issue.labels.*.name, 'safe-for-ai-review')
+      ) || (
+        github.event_name == 'pull_request_review_comment' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        contains(github.event.comment.body, '@jules') &&
+        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review')
       )
     runs-on: ubuntu-latest
     permissions:
@@ -29,68 +37,106 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get PR diff
-        id: diff
+      - name: Resolve PR context
+        id: pr_context
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = context.payload.pull_request?.number ||
-              context.payload.issue?.number;
-            if (!prNumber) {
-              core.setFailed('Could not determine PR number');
-              return;
-            }
+            const { resolvePrContext } = require('./.github/workflows/scripts/ai_review_utils');
+            await resolvePrContext({ core, github, context });
 
-            if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
-              console.log('Comment on a regular issue, skipping.');
-              return;
-            }
-
-            const { data: files } = await github.rest.pulls.listFiles({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              per_page: 100,
-            });
-            fs.writeFileSync(process.env.GITHUB_WORKSPACE + '/pr_diff.txt', diff);
-
-    if: |
-      secrets.GOOGLE_API_KEY != '' && (
-        (
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        ) || (
-          (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-          (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
-        )
-      )
+      - name: Review with Jules
+        if: ${{ steps.pr_context.outputs.skip != 'true' && secrets.GOOGLE_API_KEY != '' }}
+        uses: actions/github-script@v7
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          PR_DIFF: ${{ steps.pr_context.outputs.diff }}
+          PR_NUMBER: ${{ steps.pr_context.outputs.pr_number }}
         with:
           script: |
+            const { fetchWithRetry, parseResponseBody, sanitizeError } = require('./.github/workflows/scripts/ai_review_utils');
+
+            const apiKey = process.env.GOOGLE_API_KEY;
+            if (!apiKey) {
+              core.setFailed('GOOGLE_API_KEY secret is not configured.');
+              return;
+            }
+
+            const prNumber = Number(process.env.PR_NUMBER);
+            if (!Number.isInteger(prNumber)) {
+              core.setFailed('Invalid PR number provided to Jules step.');
+              return;
+            }
+
             const diff = process.env.PR_DIFF || '';
-    if: |
-      (
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review')
-      ) || (
-        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
-      )
-                      text: `You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.\n\nPR Diff:\n${diff}`
-                    }]
-                  }],
-                  generationConfig: { maxOutputTokens: 4096 },
-                }),
+            if (!diff) {
+              core.info('No diff content found; skipping Jules review.');
+              return;
+            }
+
+            const requestBody = {
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    {
+                      text: [
+                        'You are a code reviewer. Review the following PR diff.',
+                        'Identify bugs, security issues, style problems, and suggest improvements.',
+                        'Be concise and actionable.',
+                        '',
+                        'PR Diff:',
+                        diff,
+                      ].join('\n'),
+                    },
+                  ],
+                },
+              ],
+              generationConfig: { maxOutputTokens: 4096 },
+            };
+
+            try {
+              const response = await fetchWithRetry(
+                'https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent',
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': apiKey,
+                  },
+                  body: JSON.stringify(requestBody),
+                },
+                { attempts: 3, initialDelayMs: 1500 },
+              );
+
+              const body = await parseResponseBody(response);
+              if (!response.ok) {
+                const message = (body && typeof body === 'object' && body.error?.message)
+                  || (body && typeof body === 'object' && body.message)
+                  || 'Gemini API returned a non-success status.';
+                core.setFailed(message);
+                return;
               }
-            );
 
-            const result = await response.json();
-            const review = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate review.';
+              const review = body && typeof body === 'object'
+                ? (body.candidates?.[0]?.content?.parts || [])
+                    .map((part) => part.text || '')
+                    .join('')
+                    .trim()
+                : undefined;
 
-            await github.rest.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              event: 'COMMENT',
-              body: `## Jules Review\n\n${review}`,
-            });
+              if (!review) {
+                core.setFailed('Gemini response did not include review content.');
+                return;
+              }
+
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                event: 'COMMENT',
+                body: `## Jules Review\n\n${review}`,
+              });
+            } catch (error) {
+              core.setFailed(`Jules review failed: ${sanitizeError(error)}`);
+            }
