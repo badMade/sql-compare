@@ -18,14 +18,44 @@ jobs:
             const teamReviewers = ['team_reviewers'];
             const prNumber = context.payload.pull_request.number;
 
+            // Filter to only teams that are collaborators on this repo
+            const validTeams = [];
+            for (const team of teamReviewers) {
+              try {
+                await github.rest.teams.getByName({
+                  org: context.repo.owner,
+                  team_slug: team,
+                });
+                // Check if the team has access to this repo
+                try {
+                  await github.rest.teams.checkPermissionsForRepoInOrg({
+                    org: context.repo.owner,
+                    team_slug: team,
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                  });
+                  validTeams.push(team);
+                } catch (permError) {
+                  console.log(`Team '${team}' is not a collaborator on this repo, skipping.`);
+                }
+              } catch (teamError) {
+                console.log(`Team '${team}' not found in org, skipping.`);
+              }
+            }
+
+            if (validTeams.length === 0) {
+              console.log('No valid collaborator teams found to request reviews from. Skipping.');
+              return;
+            }
+
             try {
               await github.rest.pulls.requestReviewers({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: prNumber,
-                team_reviewers: teamReviewers,
+                team_reviewers: validTeams,
               });
-              console.log('Requested reviews from teams: ' + teamReviewers.join(', '));
+              console.log('Requested reviews from teams: ' + validTeams.join(', '));
             } catch (error) {
               console.error('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
               core.setFailed('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
