@@ -529,7 +529,11 @@ def _canonicalize_joins(s: str, allow_full_outer: bool = False, allow_left: bool
     return collapse_whitespace(s2)
 
 def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: bool = False) -> str:
-    return collapse_whitespace(_canonicalize_joins(collapse_whitespace(sql), allow_full_outer=allow_full_outer, allow_left=allow_left))
+    return _canonicalize_joins(
+        collapse_whitespace(sql),
+        allow_full_outer=allow_full_outer,
+        allow_left=allow_left,
+    )
 
 
 def canonicalize_common(sql: str, *, enable_join_reorder: bool = True, allow_full_outer: bool = False, allow_left: bool = False) -> str:
