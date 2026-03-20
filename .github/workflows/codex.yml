@@ -16,7 +16,11 @@ jobs:
         github.event.pull_request.head.repo.full_name == github.repository
       ) || (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@codex')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@codex') && github.event.pull_request.head.repo.full_name == github.repository)
+        (
+          github.event_name == 'pull_request_review_comment' &&
+          contains(github.event.comment.body, '@codex') &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        )
       )
     runs-on: ubuntu-latest
     permissions:
@@ -34,6 +38,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            // Resolve PR number from pull_request or issue_comment event context
             const prNumber = context.payload.pull_request?.number ||
               context.payload.issue?.number;
             if (!prNumber) {
@@ -41,22 +46,33 @@ jobs:
               return;
             }
 
+            // Skip regular issue comments that are not on pull requests
             if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
               console.log('Comment on a regular issue, skipping.');
               return;
             }
 
-            const { data: files } = await github.rest.pulls.listFiles({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              per_page: 100,
-            });
-            const diff = files.map(f =>
+            // Paginate through all changed files to build a complete diff
+            let allFiles = [];
+            let page = 1;
+            while (true) {
+              const { data: batch } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                per_page: 100,
+                page,
+              });
+              allFiles = allFiles.concat(batch);
+              if (batch.length < 100) break;
+              page++;
+            }
+            const diff = allFiles.map(f =>
               `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary)'}`
             ).join('\n\n');
             core.setOutput('diff', diff);
-            core.setOutput('pr_number', prNumber);
+            // Step outputs are always strings; explicit cast documents intent.
+            core.setOutput('pr_number', String(prNumber));
 
       - name: Review with Codex
         uses: actions/github-script@v7
@@ -67,42 +83,63 @@ jobs:
         with:
           script: |
             const diff = process.env.PR_DIFF || '';
+            // Env vars (from step outputs) are always strings; cast back to number.
             const prNumber = Number(process.env.PR_NUMBER);
 
             if (!prNumber) {
-              core.setFailed('Invalid PR number');
+              core.setFailed('Invalid PR number: review step cannot run without a valid PR number');
               return;
             }
 
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: 'gpt-4o',
-                messages: [
-                  {
-                    role: 'system',
-                    content: 'You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.'
-                  },
-                  {
-                    role: 'user',
-                    content: `Please review this pull request diff:\n\n${diff}`
-                  }
-                ],
-                max_tokens: 4096,
-              }),
-            });
+            // Call the OpenAI Chat Completions API; the API key is read from the
+            // environment and never logged.
+            let response;
+            try {
+              response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'gpt-4o',
+                  messages: [
+                    {
+                      role: 'system',
+                      content: 'You are a code reviewer. Review the following PR diff. ' +
+                        'Identify bugs, security issues, style problems, and suggest improvements. ' +
+                        'Be concise and actionable.',
+                    },
+                    {
+                      role: 'user',
+                      content: `Please review this pull request diff:\n\n${diff}`,
+                    },
+                  ],
+                  max_tokens: 4096,
+                }),
+              });
+            } catch (err) {
+              core.setFailed(`Failed to call OpenAI API: ${err.message}`);
+              return;
+            }
+
+            if (!response.ok) {
+              core.setFailed(`OpenAI API returned HTTP ${response.status}`);
+              return;
+            }
 
             const result = await response.json();
             const review = result.choices?.[0]?.message?.content || 'Unable to generate review.';
 
-            await github.rest.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              event: 'COMMENT',
-              body: `## Codex Review\n\n${review}`,
-            });
+            // Post the review as a PR comment
+            try {
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                event: 'COMMENT',
+                body: `## Codex Review\n\n${review}`,
+              });
+            } catch (err) {
+              core.setFailed(`Failed to post review comment: ${err.message}`);
+            }
