@@ -27,6 +27,10 @@ jobs:
               });
               console.log('Requested reviews from teams: ' + teamReviewers.join(', '));
             } catch (error) {
-              console.error('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
-              core.setFailed('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
+              const errorMessage = error?.message || String(error);
+
+              // Log the low-level error for workflow debugging, then mark the
+              // action as failed with a concise message for the job summary.
+              console.error('Reviewer assignment request failed:', errorMessage);
+              core.setFailed('Failed to assign reviewers.');
             }
