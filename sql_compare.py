@@ -73,8 +73,8 @@ SQL_COMMENT_OR_STRING_REGEX = re.compile(
     r"""
     '(?:''|[^'])*(?:'|$)        # Single-quoted strings
     | "(?:""|[^"])*(?:"|$)      # Double-quoted strings
-    | \[(?:[^\]]|\]\])*(?:\]|$) # MS SQL-style [bracketed] identifiers with escaped ]]
-    | `(?:[^`]|``)*(?:`|$)      # MySQL-style `backticked` identifiers with escaped ``
+    | \[[^\]]*(?:\]|$)          # MS SQL-style [bracketed] identifiers
+    | `[^`]*(?:`|$)             # MySQL-style `backticked` identifiers
     | /\*.*?(?:\*/|$)           # Block comments (non-nested)
     | --[^\n\r]*                # Single-line comments
     """,
@@ -215,12 +215,8 @@ def _advance_state(text: str, frm: int, to: int, mode: str, level: int):
             elif mode == 'double' and ch == '"':
                 if i + 1 < len(text) and text[i + 1] == '"': i += 1
                 else: mode = None
-            elif mode == 'bracket' and ch == ']':
-                if i + 1 < len(text) and text[i + 1] == ']': i += 1
-                else: mode = None
-            elif mode == 'backtick' and ch == '`':
-                if i + 1 < len(text) and text[i + 1] == '`': i += 1
-                else: mode = None
+            elif mode == 'bracket' and ch == ']': mode = None
+            elif mode == 'backtick' and ch == '`': mode = None
         i += 1
     return mode, level
 
