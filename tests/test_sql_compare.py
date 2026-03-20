@@ -684,34 +684,20 @@ class TestSecurity(unittest.TestCase):
 
 
 class TestExtractBaseTable(unittest.TestCase):
-    def test_empty_tokens(self):
-        result, idx = _extract_base_table([])
-        self.assertEqual(result, "")
-        self.assertEqual(idx, 0)
+    def test_scenarios(self):
+        test_cases = [
+            ("empty_tokens", [], "", 0),
+            ("single_text_token", [("TEXT", "table_a")], "table_a", 1),
+            ("multiple_text_tokens", [("TEXT", "table_a"), ("TEXT", "AS"), ("TEXT", "a")], "table_a AS a", 3),
+            ("stops_at_joinkw", [("TEXT", "table_a"), ("JOINKW", "INNER JOIN"), ("TEXT", "table_b")], "table_a", 1),
+            ("whitespace_stripping", [("TEXT", "  table_a  "), ("TEXT", "  AS  "), ("TEXT", "  a  ")], "table_a   AS   a", 3),
+        ]
 
-    def test_single_text_token(self):
-        tokens = [("TEXT", "table_a")]
-        result, idx = _extract_base_table(tokens)
-        self.assertEqual(result, "table_a")
-        self.assertEqual(idx, 1)
-
-    def test_multiple_text_tokens(self):
-        tokens = [("TEXT", "table_a"), ("TEXT", "AS"), ("TEXT", "a")]
-        result, idx = _extract_base_table(tokens)
-        self.assertEqual(result, "table_a AS a")
-        self.assertEqual(idx, 3)
-
-    def test_stops_at_joinkw(self):
-        tokens = [("TEXT", "table_a"), ("JOINKW", "INNER JOIN"), ("TEXT", "table_b")]
-        result, idx = _extract_base_table(tokens)
-        self.assertEqual(result, "table_a")
-        self.assertEqual(idx, 1)
-
-    def test_whitespace_stripping(self):
-        tokens = [("TEXT", "  table_a  "), ("TEXT", "  AS  "), ("TEXT", "  a  ")]
-        result, idx = _extract_base_table(tokens)
-        self.assertEqual(result, "table_a   AS   a")
-        self.assertEqual(idx, 3)
+        for name, tokens, expected_result, expected_idx in test_cases:
+            with self.subTest(name=name):
+                result, idx = _extract_base_table(tokens)
+                self.assertEqual(result, expected_result)
+                self.assertEqual(idx, expected_idx)
 
 if __name__ == '__main__':
     unittest.main()
