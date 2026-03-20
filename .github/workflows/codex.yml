@@ -73,11 +73,17 @@ jobs:
             const diff = process.env.DIFF || '';
             const prNumber = parseInt(process.env.PR_NUMBER, 10);
             const diff = process.env.PR_DIFF || '';
-            const prNumber = Number(process.env.PR_NUMBER);
-
-            if (!prNumber) {
               core.setFailed('Invalid PR number');
               return;
+            }
+
+            // Step 1: Implement a check for a specific label to gate AI review.
+            // This ensures the AI review only proceeds if explicitly approved.
+            const prLabels = context.payload.pull_request.labels.map(label => label.name);
+            const requiredLabel = 'ai-review-approved'; // Define the label that signals approval for AI review.
+            if (!prLabels.includes(requiredLabel)) {
+              core.info(`PR does not have the '${requiredLabel}' label. Skipping AI review to prevent potential data exposure.`);
+              return; // Exit the action if the label is not present.
             }
 
             const response = await fetch('https://api.openai.com/v1/chat/completions', {
