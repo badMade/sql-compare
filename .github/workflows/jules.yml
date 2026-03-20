@@ -29,68 +29,64 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get PR diff
-        id: diff
+      - name: Review with Jules
         uses: actions/github-script@v7
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         with:
           script: |
-            const prNumber = context.payload.pull_request?.number ||
-              context.payload.issue?.number;
-            if (!prNumber) {
-              core.setFailed('Could not determine PR number');
-              return;
-            }
+            const utils = require('./.github/scripts/utils.js');
 
-            if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
-              console.log('Comment on a regular issue, skipping.');
-              return;
-            }
-
-            const { data: files } = await github.rest.pulls.listFiles({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              per_page: 100,
-            });
-            fs.writeFileSync(process.env.GITHUB_WORKSPACE + '/pr_diff.txt', diff);
-
-    if: |
-      secrets.GOOGLE_API_KEY != '' && (
-        (
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        ) || (
-          (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-          (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
-        )
-      )
-        with:
-          script: |
-            const diff = process.env.PR_DIFF || '';
-    if: |
-      (
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review')
-      ) || (
-        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
-      )
-                      text: `You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.\n\nPR Diff:\n${diff}`
-                    }]
-                  }],
-                  generationConfig: { maxOutputTokens: 4096 },
-                }),
+            try {
+              if (!utils.shouldTrigger(context, '@jules')) {
+                return;
               }
-            );
 
-            const result = await response.json();
-            const review = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate review.';
+              const { prNumber, diff } = await utils.getPrInfo(github, context);
+              if (!prNumber) return;
 
-            await github.rest.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              event: 'COMMENT',
-              body: `## Jules Review\n\n${review}`,
-            });
+              // Security check for labels on pull_request events
+              if (context.eventName === 'pull_request') {
+                const labels = context.payload.pull_request.labels.map(l => l.name);
+                if (!labels.includes('safe-for-ai-review')) {
+                  console.log('PR is not labeled safe-for-ai-review, skipping review.');
+                  return;
+                }
+              }
+
+              if (!process.env.GOOGLE_API_KEY) {
+                console.log('GOOGLE_API_KEY is missing, skipping review.');
+                return;
+              }
+
+              const response = await utils.callAiApi(
+                'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'x-goog-api-key': process.env.GOOGLE_API_KEY,
+                  },
+                  body: JSON.stringify({
+                    contents: [{
+                      parts: [{
+                        text: `You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.\n\nPR Diff:\n${diff}`
+                      }]
+                    }],
+                    generationConfig: { maxOutputTokens: 4096 },
+                  }),
+                }
+              );
+
+              const review = response.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate review.';
+
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                event: 'COMMENT',
+                body: `## Jules Review\n\n${review}`,
+              });
+            } catch (error) {
+              core.setFailed(`Jules review failed: ${utils.formatError(error)}`);
+            }
