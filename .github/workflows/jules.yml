@@ -152,7 +152,12 @@ jobs:
 
             if (!response.ok) {
               const errorBody = await response.text();
-              core.setFailed(`Gemini review request failed (${response.status}): ${errorBody}`);
+              const maxErrorBodyLength = 1000;
+              let displayedErrorBody = errorBody;
+              if (typeof errorBody === 'string' && errorBody.length > maxErrorBodyLength) {
+                displayedErrorBody = errorBody.slice(0, maxErrorBodyLength) + `... [truncated ${errorBody.length - maxErrorBodyLength} characters]`;
+              }
+              core.setFailed(`Gemini review request failed (${response.status}): ${displayedErrorBody}`);
               return;
             }
 
