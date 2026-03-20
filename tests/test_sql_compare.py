@@ -694,21 +694,32 @@ class TestSecurity(unittest.TestCase):
 
 
 class TestCanonicalizeSelectList(unittest.TestCase):
-    def test_canonicalize_select_list(self):
-        test_cases = [
-            ("basic sorting", "SELECT c, a, b FROM t", "SELECT a, b, c FROM t"),
-            ("case insensitivity", "SELECT B, a, c FROM t", "SELECT a, B, c FROM t"),
-            ("single item", "SELECT a FROM t", "SELECT a FROM t"),
-            ("aliases", "SELECT col2 AS b, col1 AS a FROM t", "SELECT col1 AS a, col2 AS b FROM t"),
-            ("string literals with commas", "SELECT 'b, c' AS string1, 'a' AS string2 FROM t", "SELECT 'a' AS string2, 'b, c' AS string1 FROM t"),
-            # DISTINCT is treated as part of the first item: "DISTINCT b"
-            # So "DISTINCT b" sorts after "a"
-            ("distinct keyword suboptimal sorting", "SELECT DISTINCT b, a FROM t", "SELECT a, DISTINCT b FROM t"),
-        ]
+    def test_basic_alphabetic_sorting(self):
+        self.assertEqual(canonicalize_select_list("SELECT b, a FROM t"), "SELECT a, b FROM t")
 
-        for description, sql, expected in test_cases:
-            with self.subTest(description=description):
-                self.assertEqual(canonicalize_select_list(sql), expected)
+    def test_case_insensitivity(self):
+        self.assertEqual(canonicalize_select_list("SELECT B, a FROM t"), "SELECT a, B FROM t")
+        self.assertEqual(canonicalize_select_list("SELECT b, A FROM t"), "SELECT A, b FROM t")
+
+    def test_single_items(self):
+        self.assertEqual(canonicalize_select_list("SELECT a FROM t"), "SELECT a FROM t")
+        self.assertEqual(canonicalize_select_list("SELECT * FROM t"), "SELECT * FROM t")
+
+    def test_aliases(self):
+        self.assertEqual(canonicalize_select_list("SELECT b as y, a as x FROM t"), "SELECT a as x, b as y FROM t")
+        self.assertEqual(canonicalize_select_list("SELECT b y, a x FROM t"), "SELECT a x, b y FROM t")
+
+    def test_string_literals_with_commas(self):
+        self.assertEqual(canonicalize_select_list("SELECT 'b, c', a FROM t"), "SELECT 'b, c', a FROM t")
+        self.assertEqual(canonicalize_select_list("SELECT a, 'b, c' FROM t"), "SELECT 'b, c', a FROM t")
+
+    def test_suboptimal_distinct_keyword(self):
+        # Document the current sub-optimal sorting of the DISTINCT keyword
+        self.assertEqual(canonicalize_select_list("SELECT DISTINCT b, a FROM t"), "SELECT a, DISTINCT b FROM t")
+
+    def test_missing_select_or_from(self):
+        self.assertEqual(canonicalize_select_list("UPDATE t SET a = b"), "UPDATE t SET a = b")
+        self.assertEqual(canonicalize_select_list("SELECT a, b WHERE x=1"), "SELECT a, b WHERE x=1")
 
 
 if __name__ == '__main__':
