@@ -10,6 +10,7 @@ on:
 
 jobs:
   codex-review:
+    # Trigger on PR open from same repo, or when @codex is mentioned in comments
     if: |
       (
         github.event_name == 'pull_request' &&
@@ -29,34 +30,63 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get PR diff
+      - name: Resolve PR context
         id: diff
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = context.payload.pull_request?.number ||
-              context.payload.issue?.number;
-            if (!prNumber) {
-              core.setFailed('Could not determine PR number');
-              return;
+            // Helper: Format error messages without exposing sensitive data
+            function formatError(error) {
+              const message = error && error.message ? error.message : String(error);
+              // Truncate to prevent log flooding, but don't expose length-based info in user-facing errors
+              return message.substring(0, 500);
             }
 
-            if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
-              console.log('Comment on a regular issue, skipping.');
-              return;
+            // Helper: Validate and parse PR number
+            function getPrNumber(context) {
+              const rawPrNumber = context.payload.pull_request?.number ||
+                context.payload.issue?.number;
+
+              if (!rawPrNumber) {
+                return null;
+              }
+
+              const prNumber = parseInt(rawPrNumber, 10);
+              return Number.isInteger(prNumber) && prNumber > 0 ? prNumber : null;
             }
 
-            const { data: files } = await github.rest.pulls.listFiles({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              per_page: 100,
-            });
-            const diff = files.map(f =>
-              `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary)'}`
-            ).join('\n\n');
-            core.setOutput('diff', diff);
-            core.setOutput('pr_number', prNumber);
+            try {
+              const prNumber = getPrNumber(context);
+
+              if (!prNumber) {
+                core.setFailed('Could not determine PR number');
+                return;
+              }
+
+              // Skip if this is a comment on a regular issue (not a PR)
+              if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
+                console.log('Comment on a regular issue, skipping.');
+                return;
+              }
+
+              // Fetch PR diff with error handling
+              const { data: files } = await github.rest.pulls.listFiles({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                per_page: 100,
+              });
+
+              const diff = files.map(f =>
+                `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary)'}`
+              ).join('\n\n');
+
+              core.setOutput('diff', diff);
+              core.setOutput('pr_number', prNumber);
+            } catch (error) {
+              core.setFailed(`Failed to fetch PR diff: ${formatError(error)}`);
+              throw error;
+            }
 
       - name: Review with Codex
         uses: actions/github-script@v7
@@ -66,43 +96,74 @@ jobs:
           PR_NUMBER: ${{ steps.diff.outputs.pr_number }}
         with:
           script: |
-            const diff = process.env.PR_DIFF || '';
-            const prNumber = Number(process.env.PR_NUMBER);
-
-            if (!prNumber) {
-              core.setFailed('Invalid PR number');
-              return;
+            // Helper: Format error messages without exposing sensitive data
+            function formatError(error) {
+              const message = error && error.message ? error.message : String(error);
+              return message.substring(0, 500);
             }
 
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: 'gpt-4o',
-                messages: [
-                  {
-                    role: 'system',
-                    content: 'You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.'
-                  },
-                  {
-                    role: 'user',
-                    content: `Please review this pull request diff:\n\n${diff}`
-                  }
-                ],
-                max_tokens: 4096,
-              }),
-            });
+            try {
+              const diff = process.env.PR_DIFF || '';
+              const prNumber = Number(process.env.PR_NUMBER);
 
-            const result = await response.json();
-            const review = result.choices?.[0]?.message?.content || 'Unable to generate review.';
+              if (!prNumber) {
+                core.setFailed('Invalid PR number');
+                return;
+              }
 
-            await github.rest.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              event: 'COMMENT',
-              body: `## Codex Review\n\n${review}`,
-            });
+              // Call OpenAI API with proper error handling
+              const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'gpt-4o',
+                  messages: [
+                    {
+                      role: 'system',
+                      content: 'You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.'
+                    },
+                    {
+                      role: 'user',
+                      content: `Please review this pull request diff:\n\n${diff}`
+                    }
+                  ],
+                  max_tokens: 4096,
+                }),
+              });
+
+              // Check response status before parsing
+              if (!response.ok) {
+                const contentType = response.headers.get('content-type');
+                let errorBody = 'Unknown error';
+
+                // Only parse as text if content-type suggests text
+                if (contentType && contentType.includes('application/json')) {
+                  const errorData = await response.json();
+                  errorBody = errorData.error?.message || JSON.stringify(errorData);
+                } else if (contentType && contentType.includes('text')) {
+                  errorBody = await response.text();
+                }
+
+                throw new Error(`OpenAI API request failed: ${response.status} - ${errorBody.substring(0, 200)}`);
+              }
+
+              const result = await response.json();
+              const review = result.choices?.[0]?.message?.content || 'Unable to generate review.';
+
+              // Post review to PR
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                event: 'COMMENT',
+                body: `## Codex Review\n\n${review}`,
+              });
+            } catch (error) {
+              // Ensure errors don't expose API keys or sensitive info
+              const safeError = formatError(error);
+              core.setFailed(`Review failed: ${safeError}`);
+              throw error;
+            }

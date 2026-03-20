@@ -15,6 +15,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            // Helper: Format error messages without exposing sensitive data
+            function formatError(error) {
+              const message = error && error.message ? error.message : String(error);
+              return message.substring(0, 500);
+            }
+
             const teamReviewers = ['team_reviewers'];
             const prNumber = context.payload.pull_request.number;
 
@@ -27,6 +33,7 @@ jobs:
               });
               console.log('Requested reviews from teams: ' + teamReviewers.join(', '));
             } catch (error) {
-              console.error('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
-              core.setFailed('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
+              const safeError = formatError(error);
+              console.error('Failed to assign reviewers: ' + safeError);
+              core.setFailed('Failed to assign reviewers: ' + safeError);
             }
