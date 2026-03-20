@@ -56,10 +56,17 @@ jobs:
         uses: actions/github-script@v7
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PR_DIFF: ${{ steps.diff.outputs.diff }}
+          PR_NUMBER: ${{ steps.diff.outputs.pr_number }}
         with:
           script: |
-            const diff = `${{ steps.diff.outputs.diff }}`;
-            const prNumber = ${{ steps.diff.outputs.pr_number }};
+            const diff = process.env.PR_DIFF || '';
+            const prNumber = Number(process.env.PR_NUMBER);
+
+            if (!prNumber) {
+              core.setFailed('Invalid PR number');
+              return;
+            }
 
             const response = await fetch('https://api.openai.com/v1/chat/completions', {
               method: 'POST',
