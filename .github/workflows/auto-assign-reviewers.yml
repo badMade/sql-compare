@@ -33,7 +33,7 @@ jobs:
                 pull_number: prNumber,
                 reviewers: filteredReviewers,
               });
-              console.log(`Requested reviews from: ${filteredReviewers.join(', ')}`);
+              console.log('Requested reviews from: ' + filteredReviewers.join(', '));
             } catch (error) {
-              console.error(`Failed to assign reviewers: ${error.message}`);
+              console.error('Failed to assign reviewers: ' + error.message);
             }
