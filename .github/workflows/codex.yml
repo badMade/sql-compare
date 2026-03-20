@@ -49,7 +49,8 @@ jobs:
             const diff = files.map(f =>
               `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary)'}`
             ).join('\n\n');
-            core.setOutput('diff', diff);
+            // Write diff to file and set path as output to avoid size limits.
+            require('fs').writeFileSync('pr_diff.txt', diff); core.setOutput('diff_file_path', 'pr_diff.txt');
             core.setOutput('pr_number', prNumber);
 
       - name: Review with Codex
