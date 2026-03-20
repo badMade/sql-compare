@@ -404,6 +404,25 @@ class TestStripSqlComments(unittest.TestCase):
             sql = "SELECT 'This is /* not a comment */' FROM my_table;"
             self.assertEqual(strip_sql_comments(sql), sql)
 
+    def test_strip_sql_comments_with_identifiers(self):
+        # Test cases where comment markers appear inside bracketed identifiers
+        self.assertEqual(strip_sql_comments("SELECT [col -- comment] FROM tbl"), "SELECT [col -- comment] FROM tbl")
+        self.assertEqual(strip_sql_comments("SELECT [col /* comment */] FROM tbl"), "SELECT [col /* comment */] FROM tbl")
+        self.assertEqual(strip_sql_comments("SELECT [col -- comment] FROM tbl -- line comment"), "SELECT [col -- comment] FROM tbl ")
+        self.assertEqual(strip_sql_comments("SELECT [col /* comment */] FROM tbl /* block comment */"), "SELECT [col /* comment */] FROM tbl ")
+
+        # Test cases where comment markers appear inside backticked identifiers
+        self.assertEqual(strip_sql_comments("SELECT `col -- comment` FROM tbl"), "SELECT `col -- comment` FROM tbl")
+        self.assertEqual(strip_sql_comments("SELECT `col /* comment */` FROM tbl"), "SELECT `col /* comment */` FROM tbl")
+        self.assertEqual(strip_sql_comments("SELECT `col -- comment` FROM tbl -- line comment"), "SELECT `col -- comment` FROM tbl ")
+        self.assertEqual(strip_sql_comments("SELECT `col /* comment */` FROM tbl /* block comment */"), "SELECT `col /* comment */` FROM tbl ")
+
+        # Mixed cases, ensuring both identifier types and string literals are handled correctly
+        self.assertEqual(strip_sql_comments("SELECT `col -- comment` FROM [tbl /* comment */]"), "SELECT `col -- comment` FROM [tbl /* comment */]")
+        self.assertEqual(strip_sql_comments("SELECT `col -- comment` FROM [tbl /* comment */] -- outside comment"), "SELECT `col -- comment` FROM [tbl /* comment */] ")
+        self.assertEqual(strip_sql_comments("SELECT 'string -- comment' FROM `tbl /* comment */`"), "SELECT 'string -- comment' FROM `tbl /* comment */`")
+        self.assertEqual(strip_sql_comments("SELECT 'string -- comment' FROM `tbl /* comment */` /* outside comment */"), "SELECT 'string -- comment' FROM `tbl /* comment */` ")
+
 
 class TestUppercaseOutsideQuotes(unittest.TestCase):
     def test_unquoted_text(self):
@@ -698,6 +717,34 @@ class TestExtractBaseTable(unittest.TestCase):
                 result, idx = _extract_base_table(tokens)
                 self.assertEqual(result, expected_result)
                 self.assertEqual(idx, expected_idx)
+class TestCanonicalizeSelectList(unittest.TestCase):
+    def test_basic_alphabetic_sorting(self):
+        self.assertEqual(canonicalize_select_list("SELECT b, a FROM t"), "SELECT a, b FROM t")
+
+    def test_case_insensitivity(self):
+        self.assertEqual(canonicalize_select_list("SELECT B, a FROM t"), "SELECT a, B FROM t")
+        self.assertEqual(canonicalize_select_list("SELECT b, A FROM t"), "SELECT A, b FROM t")
+
+    def test_single_items(self):
+        self.assertEqual(canonicalize_select_list("SELECT a FROM t"), "SELECT a FROM t")
+        self.assertEqual(canonicalize_select_list("SELECT * FROM t"), "SELECT * FROM t")
+
+    def test_aliases(self):
+        self.assertEqual(canonicalize_select_list("SELECT b as y, a as x FROM t"), "SELECT a as x, b as y FROM t")
+        self.assertEqual(canonicalize_select_list("SELECT b y, a x FROM t"), "SELECT a x, b y FROM t")
+
+    def test_string_literals_with_commas(self):
+        self.assertEqual(canonicalize_select_list("SELECT 'b, c', a FROM t"), "SELECT 'b, c', a FROM t")
+        self.assertEqual(canonicalize_select_list("SELECT a, 'b, c' FROM t"), "SELECT 'b, c', a FROM t")
+
+    def test_suboptimal_distinct_keyword(self):
+        # Document the current sub-optimal sorting of the DISTINCT keyword
+        self.assertEqual(canonicalize_select_list("SELECT DISTINCT b, a FROM t"), "SELECT a, DISTINCT b FROM t")
+
+    def test_missing_select_or_from(self):
+        self.assertEqual(canonicalize_select_list("UPDATE t SET a = b"), "UPDATE t SET a = b")
+        self.assertEqual(canonicalize_select_list("SELECT a, b WHERE x=1"), "SELECT a, b WHERE x=1")
+
 
 if __name__ == '__main__':
     unittest.main()
