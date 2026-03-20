@@ -36,10 +36,28 @@ jobs:
                   });
                   validTeams.push(team);
                 } catch (permError) {
-                  console.log(`Team '${team}' is not a collaborator on this repo, skipping.`);
+                  const status = permError && permError.status;
+                  if (status === 404 || status === 422) {
+                    console.log(`Team '${team}' is not a collaborator on this repo, skipping.`);
+                  } else {
+                    console.error(
+                      `Unexpected error checking permissions for team '${team}':`,
+                      permError
+                    );
+                    throw permError;
+                  }
                 }
               } catch (teamError) {
-                console.log(`Team '${team}' not found in org, skipping.`);
+                const status = teamError && teamError.status;
+                if (status === 404 || status === 422) {
+                  console.log(`Team '${team}' not found in org, skipping.`);
+                } else {
+                  console.error(
+                    `Unexpected error looking up team '${team}' in org:`,
+                    teamError
+                  );
+                  throw teamError;
+                }
               }
             }
 
