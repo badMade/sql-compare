@@ -34,18 +34,27 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = context.payload.pull_request?.number ||
-              context.payload.issue?.number;
-            if (!prNumber) {
-              core.setFailed('Could not determine PR number');
-              return;
-            }
-            const { data: files } = await github.rest.pulls.listFiles({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              per_page: 100,
-            });
+           const prNumber = context.payload.pull_request?.number ||
+             context.payload.issue?.number;
+           if (!prNumber) {
+             core.setFailed('Could not determine PR number');
+             return;
+           }
+
+           // If the event is an issue_comment and it's not on a pull request,
+           // then we should exit gracefully.
+           // context.payload.issue.pull_request will be undefined for regular issues.
+           if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
+             console.log('Comment on a regular issue, skipping PR file listing.');
+             return;
+           }
+
+           const { data: files } = await github.rest.pulls.listFiles({
+             owner: context.repo.owner,
+             repo: context.repo.repo,
+             pull_number: prNumber,
+             per_page: 100,
+           });
             const diff = files.map(f =>
               `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary)'}`
             ).join('\n\n');
