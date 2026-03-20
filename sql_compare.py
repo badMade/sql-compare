@@ -73,8 +73,8 @@ SQL_COMMENT_OR_STRING_REGEX = re.compile(
     r"""
     '(?:''|[^'])*(?:'|$)        # Single-quoted strings
     | "(?:""|[^"])*(?:"|$)      # Double-quoted strings
-    | \[[^\]]*(?:\]|$)          # MS SQL-style [bracketed] identifiers
-    | `[^`]*(?:`|$)             # MySQL-style `backticked` identifiers
+    | \[(?:[^\]]|\]\])*(?:\]|$) # MS SQL-style [bracketed] identifiers with escaped ]]
+    | `(?:[^`]|``)*(?:`|$)      # MySQL-style `backticked` identifiers with escaped ``
     | /\*.*?(?:\*/|$)           # Block comments (non-nested)
     | --[^\n\r]*                # Single-line comments
     """,
