@@ -539,7 +539,7 @@ def canonicalize_common(sql: str, *, enable_join_reorder: bool = True, allow_ful
     s = _canonicalize_where_and(s)
     if enable_join_reorder:
         s = _canonicalize_joins(s, allow_full_outer=allow_full_outer, allow_left=allow_left)
-    return s
+    return collapse_whitespace(s)
 
 
 # =============================
