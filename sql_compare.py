@@ -215,8 +215,12 @@ def _advance_state(text: str, frm: int, to: int, mode: str, level: int):
             elif mode == 'double' and ch == '"':
                 if i + 1 < len(text) and text[i + 1] == '"': i += 1
                 else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
+            elif mode == 'bracket' and ch == ']':
+                if i + 1 < len(text) and text[i + 1] == ']': i += 1
+                else: mode = None
+            elif mode == 'backtick' and ch == '`':
+                if i + 1 < len(text) and text[i + 1] == '`': i += 1
+                else: mode = None
         i += 1
     return mode, level
 
