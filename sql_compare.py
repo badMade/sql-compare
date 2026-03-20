@@ -70,12 +70,68 @@ def safe_read_file(path_str: str) -> str:
     return p.read_text(encoding="utf-8", errors="ignore")
 
 def strip_sql_comments(s: str) -> str:
+    """Remove -- line comments and /* ... */ block comments (non-nested) outside of string literals."""
+    out = []
+    i = 0
+    n = len(s)
+    mode = None
 
-    """Remove -- line comments and /* ... */ block comments (non-nested)."""
-    s = re.sub(r"/\*.*?\*/", "", s, flags=re.S)
-    s = re.sub(r"--[^\n\r]*", "", s)
-    return s
+    while i < n:
+        if mode is None:
+            if s[i:i+2] == '/*':
+                end = s.find('*/', i + 2)
+                i = end + 2 if end != -1 else n
+                continue
+            if s[i:i+2] == '--':
+                end_n = s.find('\n', i + 2)
+                end_r = s.find('\r', i + 2)
+                candidates = [pos for pos in (end_n, end_r) if pos != -1]
+                if candidates:
+                    i = min(candidates)
+                else:
+                    i = n
+                continue
 
+            ch = s[i]
+            if ch == "'": mode = 'single'
+            elif ch == '"': mode = 'double'
+            elif ch == '[': mode = 'bracket'
+            elif ch == '`': mode = 'backtick'
+            out.append(ch)
+            i += 1
+        else:
+            ch = s[i]
+            if mode == 'single' and ch == "'":
+                if i + 1 < n and s[i + 1] == "'":
+                    out.append("''")
+                    i += 2
+                    continue
+                else:
+                    mode = None
+            elif mode == 'double' and ch == '"':
+                if i + 1 < n and s[i + 1] == '"':
+                    out.append('""')
+                    i += 2
+                    continue
+                else:
+                    mode = None
+            elif mode == 'bracket' and ch == ']':
+                if i + 1 < n and s[i + 1] == ']':
+                    out.append(']]')
+                    i += 2
+                    continue
+                else:
+                    mode = None
+            elif mode == 'backtick' and ch == '`':
+                if i + 1 < n and s[i + 1] == '`':
+                    out.append('``')
+                    i += 2
+                    continue
+                else:
+                    mode = None
+            out.append(ch)
+            i += 1
+    return "".join(out)
 
 def collapse_whitespace(s: str) -> str:
     """Collapse runs of whitespace to a single space and strip."""
@@ -203,8 +259,12 @@ def _advance_state(text: str, frm: int, to: int, mode: str, level: int):
             elif mode == 'double' and ch == '"':
                 if i + 1 < len(text) and text[i + 1] == '"': i += 1
                 else: mode = None
-            elif mode == 'bracket' and ch == ']': mode = None
-            elif mode == 'backtick' and ch == '`': mode = None
+            elif mode == 'bracket' and ch == ']':
+                if i + 1 < len(text) and text[i + 1] == ']': i += 1
+                else: mode = None
+            elif mode == 'backtick' and ch == '`':
+                if i + 1 < len(text) and text[i + 1] == '`': i += 1
+                else: mode = None
         i += 1
     return mode, level
 

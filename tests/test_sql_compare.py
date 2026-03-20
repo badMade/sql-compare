@@ -4,9 +4,11 @@ from unittest.mock import patch
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize, canonicalize_select_list,
     strip_sql_comments, uppercase_outside_quotes,
-    top_level_find_kw, collapse_whitespace,
-    _tokenize_from_clause_body, split_top_level,
-    canonicalize_select_list
+    top_level_find_kw, remove_outer_parentheses,
+    _extract_join_segments,
+    collapse_whitespace,
+    _tokenize_from_clause_body,
+    split_top_level,
 )
 
 
@@ -394,15 +396,23 @@ class TestStripSqlComments(unittest.TestCase):
         expected = "SELECT  * FROM my_table;"
         self.assertEqual(strip_sql_comments(sql), expected)
 
-    def test_comment_like_sequences_in_strings(self):
-        """Ensures comment-like sequences in string literals are not stripped."""
-        with self.subTest("Line comment in string"):
-            sql = "SELECT 'This is -- not a comment' FROM my_table;"
-            self.assertEqual(strip_sql_comments(sql), sql)
+    def test_comment_like_sequences_in_strings_and_identifiers(self):
+        """Ensures comment-like sequences in quoted SQL literals and identifiers are not stripped."""
+        test_cases = [
+            ("single-quoted line comment", "SELECT 'This is -- not a comment' FROM my_table;"),
+            ("single-quoted block comment", "SELECT 'This is /* not a comment */' FROM my_table;"),
+            ("single-quoted with escaped quote", "SELECT 'This is -- not a '' comment' FROM my_table;"),
+            ("double-quoted line comment", 'SELECT "-- not a comment" FROM my_table;'),
+            ("double-quoted block comment", 'SELECT "/* not a comment */" FROM my_table;'),
+            ("backtick-quoted line comment", "SELECT `-- not a comment` FROM my_table;"),
+            ("backtick-quoted block comment", "SELECT `/* not a comment */` FROM my_table;"),
+            ("bracketed line comment", "SELECT [-- not a comment] FROM my_table;"),
+            ("bracketed block comment", "SELECT [/* not a comment */] FROM my_table;"),
+        ]
 
-        with self.subTest("Block comment in string"):
-            sql = "SELECT 'This is /* not a comment */' FROM my_table;"
-            self.assertEqual(strip_sql_comments(sql), sql)
+        for description, sql in test_cases:
+            with self.subTest(description=description):
+                self.assertEqual(strip_sql_comments(sql), sql)
 
 
 class TestUppercaseOutsideQuotes(unittest.TestCase):
