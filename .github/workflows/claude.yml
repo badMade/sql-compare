@@ -45,3 +45,10 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           allowed_tools: "Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch,TodoWrite"
+          review_prompt: |
+            Review this PR thoroughly. Check for:
+            - Correctness and potential bugs
+            - Security vulnerabilities
+            - Code style consistency
+            - Test coverage gaps
+            Provide actionable inline comments on specific lines where issues are found.
