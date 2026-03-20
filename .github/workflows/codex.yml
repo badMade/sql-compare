@@ -157,8 +157,24 @@ jobs:
             });
 
             if (!response.ok) {
-              const errorBody = await response.text();
-              core.setFailed(`OpenAI review request failed (${response.status}): ${errorBody}`);
+              const rawErrorBody = await response.text();
+              const MAX_ERROR_LENGTH = 500;
+              let errorSummary = rawErrorBody;
+
+              try {
+                const parsed = JSON.parse(rawErrorBody);
+                if (parsed && parsed.error && typeof parsed.error.message === 'string') {
+                  errorSummary = parsed.error.message;
+                }
+              } catch (e) {
+                // If the body is not JSON, fall back to the raw text
+              }
+
+              if (typeof errorSummary === 'string' && errorSummary.length > MAX_ERROR_LENGTH) {
+                errorSummary = errorSummary.slice(0, MAX_ERROR_LENGTH) + '... [truncated]';
+              }
+
+              core.setFailed(`OpenAI review request failed (${response.status}): ${errorSummary}`);
               return;
             }
 
