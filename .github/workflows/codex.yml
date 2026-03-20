@@ -11,12 +11,18 @@ on:
 jobs:
   codex-review:
     if: |
-      (
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository
-      ) || (
-        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@codex')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@codex') && github.event.pull_request.head.repo.full_name == github.repository)
+      secrets.OPENAI_API_KEY != '' && (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        ) || (
+          github.event_name == 'issue_comment' &&
+          contains(github.event.comment.body, '@codex')
+        ) || (
+          github.event_name == 'pull_request_review_comment' &&
+          contains(github.event.comment.body, '@codex') &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        )
       )
     runs-on: ubuntu-latest
     permissions:
@@ -29,55 +35,92 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get PR diff
-        id: diff
+      - name: Resolve PR context
+        id: pr-context
         uses: actions/github-script@v7
         with:
           script: |
-            const prNumber = context.payload.pull_request?.number ||
-              context.payload.issue?.number;
-            if (!prNumber) {
-              core.setFailed('Could not determine PR number');
+            const prNumber = context.payload.pull_request?.number || context.payload.issue?.number;
+            if (!Number.isInteger(prNumber)) {
+              core.setFailed('Could not determine pull request number.');
               return;
             }
 
-            if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
-              console.log('Comment on a regular issue, skipping.');
+            if (context.eventName === 'issue_comment' && !context.payload.issue?.pull_request) {
+              core.info('Comment is on a regular issue; skipping Codex review.');
               return;
             }
 
-            const { data: files } = await github.rest.pulls.listFiles({
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+
+            if (pullRequest.head.repo.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
+              core.info('Pull request originates from a fork; skipping Codex review.');
+              return;
+            }
+
+            core.setOutput('pr_number', String(prNumber));
+
+      - name: Get PR diff
+        id: diff
+        if: steps.pr-context.outputs.pr_number != ''
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr-context.outputs.pr_number }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const prNumber = Number.parseInt(process.env.PR_NUMBER || '', 10);
+            if (!Number.isInteger(prNumber)) {
+              core.setFailed('Invalid pull request number.');
+              return;
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: prNumber,
               per_page: 100,
             });
-            const diff = files.map(f =>
-              `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary)'}`
-            ).join('\n\n');
-            core.setOutput('diff', diff);
-            core.setOutput('pr_number', prNumber);
+
+            const diff = files.map((file) => (
+              `--- ${file.filename}\n+++ ${file.filename}\n${file.patch || '(binary)'}`
+            )).join('\n\n');
+            const diffPath = path.join(process.env.GITHUB_WORKSPACE, 'codex-pr-diff.txt');
+            fs.writeFileSync(diffPath, diff, 'utf8');
+            core.setOutput('diff_path', diffPath);
 
       - name: Review with Codex
+        if: steps.pr-context.outputs.pr_number != '' && steps.diff.outputs.diff_path != ''
         uses: actions/github-script@v7
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          PR_DIFF: ${{ steps.diff.outputs.diff }}
-          PR_NUMBER: ${{ steps.diff.outputs.pr_number }}
+          PR_DIFF_PATH: ${{ steps.diff.outputs.diff_path }}
+          PR_NUMBER: ${{ steps.pr-context.outputs.pr_number }}
         with:
           script: |
-            const diff = process.env.PR_DIFF || '';
-            const prNumber = Number(process.env.PR_NUMBER);
-
-            if (!prNumber) {
-              core.setFailed('Invalid PR number');
+            const fs = require('fs');
+            const prNumber = Number.parseInt(process.env.PR_NUMBER || '', 10);
+            if (!Number.isInteger(prNumber)) {
+              core.setFailed('Invalid pull request number.');
               return;
             }
 
+            const diffPath = process.env.PR_DIFF_PATH || '';
+            if (!diffPath || !fs.existsSync(diffPath)) {
+              core.setFailed('PR diff file is not available.');
+              return;
+            }
+
+            const diff = fs.readFileSync(diffPath, 'utf8');
             const response = await fetch('https://api.openai.com/v1/chat/completions', {
               method: 'POST',
               headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
@@ -85,16 +128,22 @@ jobs:
                 messages: [
                   {
                     role: 'system',
-                    content: 'You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.'
+                    content: 'You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.',
                   },
                   {
                     role: 'user',
-                    content: `Please review this pull request diff:\n\n${diff}`
-                  }
+                    content: `Please review this pull request diff:\n\n${diff}`,
+                  },
                 ],
                 max_tokens: 4096,
               }),
             });
+
+            if (!response.ok) {
+              const errorBody = await response.text();
+              core.setFailed(`OpenAI review request failed (${response.status}): ${errorBody}`);
+              return;
+            }
 
             const result = await response.json();
             const review = result.choices?.[0]?.message?.content || 'Unable to generate review.';
