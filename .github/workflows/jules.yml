@@ -56,11 +56,22 @@ jobs:
         uses: actions/github-script@v7
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          PR_DIFF: ${{ steps.diff.outputs.diff }}
+          DIFF: ${{ steps.diff.outputs.diff }}
           PR_NUMBER: ${{ steps.diff.outputs.pr_number }}
         with:
           script: |
-            const diff = process.env.PR_DIFF || '';
+            const diff = process.env.DIFF;
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+
+            if (!diff) {
+              core.setFailed('Diff not available for review');
+              return;
+            }
+
+            if (!Number.isInteger(prNumber)) {
+              core.setFailed('Invalid or missing PR number');
+              return;
+            }
             const prNumber = Number(process.env.PR_NUMBER);
 
             if (!prNumber) {
