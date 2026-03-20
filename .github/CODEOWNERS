@@ -2,4 +2,4 @@
 # GitHub will automatically request reviews from these accounts on every PR.
 # See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
-* @Copilot @gemini-code-assist[bot]
+* @Copilot @gemini-code-assist
