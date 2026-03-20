@@ -10,6 +10,7 @@ on:
 
 jobs:
   jules-review:
+    # Only run for PRs from the same repository or when explicitly mentioned
     if: |
       (
         github.event_name == 'pull_request' &&
@@ -27,70 +28,172 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          # Fetch full history to enable comprehensive diff analysis
           fetch-depth: 0
 
+      - name: Validate API key
+        id: validate
+        run: |
+          if [ -z "${{ secrets.GOOGLE_API_KEY }}" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "::notice::GOOGLE_API_KEY is not set, skipping Jules review"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "::info::GOOGLE_API_KEY is configured"
+          fi
+
       - name: Get PR diff
+        if: steps.validate.outputs.skip == 'false'
         id: diff
         uses: actions/github-script@v7
         with:
           script: |
             const prNumber = context.payload.pull_request?.number ||
               context.payload.issue?.number;
+
             if (!prNumber) {
-              core.setFailed('Could not determine PR number');
+              core.info('Could not determine PR number, skipping');
+              core.setOutput('skip', 'true');
               return;
             }
 
+            core.info(`Processing PR #${prNumber}`);
+
+            // Check if this is a regular issue comment (not on a PR)
             if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
-              console.log('Comment on a regular issue, skipping.');
+              core.info('Comment on a regular issue (not a PR), skipping');
+              core.setOutput('skip', 'true');
               return;
             }
 
-            const { data: files } = await github.rest.pulls.listFiles({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              per_page: 100,
-            });
-            fs.writeFileSync(process.env.GITHUB_WORKSPACE + '/pr_diff.txt', diff);
+            core.info('Fetching PR files with pagination...');
+            let allFiles = [];
+            let page = 1;
+            const perPage = 100;
+            const maxPages = 10; // Limit to prevent excessive API calls
 
-    if: |
-      secrets.GOOGLE_API_KEY != '' && (
-        (
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        ) || (
-          (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-          (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
-        )
-      )
+            // Paginate through all files in the PR
+            while (page <= maxPages) {
+              try {
+                const { data: files } = await github.rest.pulls.listFiles({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  per_page: perPage,
+                  page: page,
+                });
+
+                if (files.length === 0) {
+                  break;
+                }
+
+                allFiles = allFiles.concat(files);
+                core.info(`Fetched ${files.length} files from page ${page}`);
+
+                // If we got fewer files than requested, we've reached the end
+                if (files.length < perPage) {
+                  break;
+                }
+
+                page++;
+              } catch (error) {
+                core.warning(`Failed to fetch page ${page}: ${error.message}`);
+                break;
+              }
+            }
+
+            if (allFiles.length === 0) {
+              core.info('No files found in PR, skipping');
+              core.setOutput('skip', 'true');
+              return;
+            }
+
+            core.info(`Total files fetched: ${allFiles.length}`);
+
+            // Construct diff from all files
+            const diff = allFiles.map(f =>
+              `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary or no changes)'}`
+            ).join('\n\n');
+
+            core.setOutput('diff', diff);
+            core.setOutput('pr_number', prNumber);
+            core.setOutput('skip', 'false');
+
+      - name: Review with Jules (Google Gemini)
+        if: steps.validate.outputs.skip == 'false' && steps.diff.outputs.skip != 'true'
+        uses: actions/github-script@v7
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          PR_DIFF: ${{ steps.diff.outputs.diff }}
+          PR_NUMBER: ${{ steps.diff.outputs.pr_number }}
         with:
           script: |
             const diff = process.env.PR_DIFF || '';
-    if: |
-      (
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review')
-      ) || (
-        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
-      )
+            const prNumber = Number(process.env.PR_NUMBER);
+            const apiKey = process.env.GOOGLE_API_KEY;
+
+            if (!prNumber) {
+              core.setFailed('Invalid PR number');
+              return;
+            }
+
+            if (!apiKey) {
+              core.setFailed('GOOGLE_API_KEY is not set');
+              return;
+            }
+
+            if (!diff || diff.trim().length === 0) {
+              core.info('No diff content to review');
+              return;
+            }
+
+            core.info(`Sending review request to Google Gemini API for PR #${prNumber}`);
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+            try {
+              const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  contents: [{
+                    parts: [{
                       text: `You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.\n\nPR Diff:\n${diff}`
                     }]
                   }],
-                  generationConfig: { maxOutputTokens: 4096 },
+                  generationConfig: {
+                    maxOutputTokens: 4096,
+                    temperature: 0.3,
+                  },
                 }),
+              });
+
+              if (!response.ok) {
+                const errorText = await response.text();
+                core.error(`Google API request failed with status ${response.status}`);
+                core.error(`Response: ${errorText.substring(0, 500)}`); // Log first 500 chars
+                core.setFailed(`API request failed: ${response.status} ${response.statusText}`);
+                return;
               }
-            );
 
-            const result = await response.json();
-            const review = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate review.';
+              const result = await response.json();
+              const review = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate review.';
 
-            await github.rest.pulls.createReview({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              event: 'COMMENT',
-              body: `## Jules Review\n\n${review}`,
-            });
+              core.info('Review generated successfully');
+
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                event: 'COMMENT',
+                body: `## Jules Review\n\n${review}\n\n_Originally posted by @github-actions[bot] in ${context.payload.pull_request?.html_url || context.payload.issue?.html_url}#pullrequestreview-jules_`,
+              });
+
+              core.info('Review posted successfully');
+            } catch (error) {
+              core.error(`Failed to complete review: ${error.message}`);
+              core.error(`Error stack: ${error.stack}`);
+              core.setFailed(`Review failed: ${error.message}`);
+            }
