@@ -10,13 +10,14 @@ on:
 
 jobs:
   jules-review:
+    # Only run on PRs from the same repo; for comments, require the @jules mention
     if: |
       (
         github.event_name == 'pull_request' &&
         github.event.pull_request.head.repo.full_name == github.repository
       ) || (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules') && github.event.pull_request.head.repo.full_name == github.repository)
       )
     runs-on: ubuntu-latest
     permissions:
@@ -34,6 +35,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            // Resolve the PR number from whichever event triggered the workflow
             const prNumber = context.payload.pull_request?.number ||
               context.payload.issue?.number;
             if (!prNumber) {
@@ -41,6 +43,7 @@ jobs:
               return;
             }
 
+            // Skip regular issue comments that are not on a pull request
             if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
               console.log('Comment on a regular issue, skipping.');
               return;
@@ -52,39 +55,85 @@ jobs:
               pull_number: prNumber,
               per_page: 100,
             });
-            fs.writeFileSync(process.env.GITHUB_WORKSPACE + '/pr_diff.txt', diff);
+            const diff = files.map(f =>
+              `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary)'}`
+            ).join('\n\n');
+            core.setOutput('diff', diff);
+            core.setOutput('pr_number', String(prNumber));
 
-    if: |
-      secrets.GOOGLE_API_KEY != '' && (
-        (
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        ) || (
-          (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-          (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
-        )
-      )
+      - name: Review with Jules
+        uses: actions/github-script@v7
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          PR_DIFF: ${{ steps.diff.outputs.diff }}
+          PR_NUMBER: ${{ steps.diff.outputs.pr_number }}
         with:
           script: |
-            const diff = process.env.PR_DIFF || '';
-    if: |
-      (
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review')
-      ) || (
-        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@jules')) ||
-        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@jules'))
-      )
-                      text: `You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.\n\nPR Diff:\n${diff}`
-                    }]
-                  }],
-                  generationConfig: { maxOutputTokens: 4096 },
-                }),
-              }
-            );
+            // Helper: extract a safe, non-sensitive error message string
+            function getErrorMessage(err) {
+              return (err && err.message) ? err.message : String(err);
+            }
 
-            const result = await response.json();
+            const diff = process.env.PR_DIFF || '';
+
+            // Validate that the API key is present before attempting any network call
+            if (!process.env.GOOGLE_API_KEY) {
+              core.setFailed('GOOGLE_API_KEY secret is not configured');
+              return;
+            }
+
+            // Validate PR number once; parseInt handles leading/trailing whitespace
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              core.setFailed('Invalid PR number');
+              return;
+            }
+
+            // Call the Gemini API; wrap in try/catch to handle network failures or
+            // unexpected response formats gracefully
+            let response;
+            try {
+              response = await fetch(
+                'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
+                {
+                  method: 'POST',
+                  headers: {
+                    // Pass the API key in a header to avoid it appearing in URLs or logs
+                    'x-goog-api-key': process.env.GOOGLE_API_KEY,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    contents: [{
+                      parts: [{
+                        text: `You are a code reviewer. Review the following PR diff. Identify bugs, security issues, style problems, and suggest improvements. Be concise and actionable.\n\nPR Diff:\n${diff}`
+                      }]
+                    }],
+                    generationConfig: { maxOutputTokens: 4096 },
+                  }),
+                }
+              );
+            } catch (networkErr) {
+              core.setFailed(`Network error calling Gemini API: ${getErrorMessage(networkErr)}`);
+              return;
+            }
+
+            // Check Content-Type before attempting JSON parse to avoid errors on
+            // unexpected response formats (e.g. HTML error pages or binary bodies)
+            const contentType = response.headers.get('content-type') || '';
+            if (!response.ok || !contentType.includes('application/json')) {
+              const body = await response.text();
+              core.setFailed(`Gemini API error (HTTP ${response.status}): ${body.slice(0, 100)}`);
+              return;
+            }
+
+            let result;
+            try {
+              result = await response.json();
+            } catch (parseErr) {
+              core.setFailed(`Failed to parse Gemini API response: ${getErrorMessage(parseErr)}`);
+              return;
+            }
+
             const review = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate review.';
 
             await github.rest.pulls.createReview({
