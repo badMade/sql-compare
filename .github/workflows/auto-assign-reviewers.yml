@@ -25,7 +25,9 @@ jobs:
                 pull_number: prNumber,
                 team_reviewers: teamReviewers,
               });
-              console.log('Requested reviews from teams: ' + teamReviewers.join(', '));
+              console.log(`Requested reviews from teams: ${teamReviewers.join(', ')}`);
             } catch (error) {
-              console.error('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
-              core.setFailed('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
+              const message = error && error.message ? error.message : String(error);
+              console.error(`Failed to assign reviewers: ${message}`);
+              core.setFailed(`Failed to assign reviewers: ${message}`);
+            }
