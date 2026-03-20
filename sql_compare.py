@@ -410,14 +410,17 @@ def _tokenize_from_clause_body(body: str) -> list:
 
 
 def _extract_base_table(tokens: list) -> tuple:
-    base = ""
+    parts = []
     idx = 0
     while idx < len(tokens) and tokens[idx][0] != "JOINKW":
         kind, text = tokens[idx]
         if kind == "TEXT":
-            base = (base + " " + text).strip()
+            if not parts:
+                parts.append(text.strip())
+            else:
+                parts.append(text.rstrip())
         idx += 1
-    return base, idx
+    return " ".join(parts) if parts else "", idx
 
 
 def _clean_join_type(join_kw: str) -> str:

@@ -2,6 +2,7 @@ import unittest
 import argparse
 from unittest.mock import patch
 from sql_compare import (
+    _extract_base_table,
     canonicalize_joins, clause_end_index, tokenize,
     strip_sql_comments, uppercase_outside_quotes,
     top_level_find_kw, collapse_whitespace,
@@ -701,6 +702,21 @@ class TestSecurity(unittest.TestCase):
 
 
 
+class TestExtractBaseTable(unittest.TestCase):
+    def test_scenarios(self):
+        test_cases = [
+            ("empty_tokens", [], "", 0),
+            ("single_text_token", [("TEXT", "table_a")], "table_a", 1),
+            ("multiple_text_tokens", [("TEXT", "table_a"), ("TEXT", "AS"), ("TEXT", "a")], "table_a AS a", 3),
+            ("stops_at_joinkw", [("TEXT", "table_a"), ("JOINKW", "INNER JOIN"), ("TEXT", "table_b")], "table_a", 1),
+            ("whitespace_stripping", [("TEXT", "  table_a  "), ("TEXT", "  AS  "), ("TEXT", "  a  ")], "table_a   AS   a", 3),
+        ]
+
+        for name, tokens, expected_result, expected_idx in test_cases:
+            with self.subTest(name=name):
+                result, idx = _extract_base_table(tokens)
+                self.assertEqual(result, expected_result)
+                self.assertEqual(idx, expected_idx)
 class TestCanonicalizeSelectList(unittest.TestCase):
     def test_basic_alphabetic_sorting(self):
         self.assertEqual(canonicalize_select_list("SELECT b, a FROM t"), "SELECT a, b FROM t")
