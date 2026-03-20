@@ -11,7 +11,7 @@ on:
 jobs:
   codex-review:
     if: |
-      secrets.OPENAI_API_KEY != '' && (
+      (
         (
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
@@ -126,6 +126,11 @@ jobs:
             const diffPath = process.env.PR_DIFF_PATH || '';
             if (!diffPath || !fs.existsSync(diffPath)) {
               core.setFailed('PR diff file is not available.');
+              return;
+            }
+
+            if (!process.env.OPENAI_API_KEY) {
+              core.info('OpenAI API key is not configured; skipping Codex review.');
               return;
             }
 
