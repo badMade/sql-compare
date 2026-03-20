@@ -94,18 +94,17 @@ jobs:
               return;
             }
 
-            const files = await github.paginate(github.rest.pulls.listFiles, {
+            const { data: diffContent } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: prNumber,
-              per_page: 100,
+              mediaType: {
+                format: 'diff',
+              },
             });
 
-            const diff = files.map((file) => (
-              `--- ${file.filename}\n+++ ${file.filename}\n${file.patch || '(binary)'}`
-            )).join('\n\n');
             const diffPath = path.join(process.env.GITHUB_WORKSPACE, 'jules-pr-diff.txt');
-            fs.writeFileSync(diffPath, diff, 'utf8');
+            fs.writeFileSync(diffPath, diffContent, 'utf8');
             core.setOutput('diff_path', diffPath);
 
       - name: Review with Jules
