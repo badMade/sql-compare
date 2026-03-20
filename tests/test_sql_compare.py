@@ -7,6 +7,7 @@ from sql_compare import (
     strip_sql_comments, uppercase_outside_quotes,
     top_level_find_kw, collapse_whitespace,
     _tokenize_from_clause_body, split_top_level,
+    canonicalize_select_list, remove_outer_parentheses,
 )
 
 
