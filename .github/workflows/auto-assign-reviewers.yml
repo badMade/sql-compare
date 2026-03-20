@@ -26,5 +26,5 @@ jobs:
               });
               console.log('Requested reviews from teams: ' + teamReviewers.join(', '));
             } catch (error) {
-              console.error('Failed to assign reviewers: ' + error.message);
-            }
+              console.error('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
+              core.setFailed('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
