@@ -24,6 +24,11 @@ jobs:
             const teamReviewers = ['team_reviewers'];
             const prNumber = context.payload.pull_request.number;
 
+            if (teamReviewers.length === 0) {
+              console.log('No team reviewers specified, skipping.');
+              return;
+            }
+
             try {
               await github.rest.pulls.requestReviewers({
                 owner: context.repo.owner,
