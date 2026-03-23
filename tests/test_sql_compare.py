@@ -268,11 +268,10 @@ class TestTokenize(unittest.TestCase):
              "SELECT 'string', E'string2', \"col 1\", E\"esc\"",
              ['SELECT', "'string'", ',', 'E', "'string2'", ',', '"col 1"', ',', 'E"esc"']),
 
-            # Note: 'it''s' is parsed as 'it', 's' by the regex currently.
-            # This test ensures no unexpected regressions.
+            # Note: Escaped quotes inside strings (e.g. 'it''s') are correctly parsed as a single token.
             ("Strings with escaped single quotes",
              "SELECT 'it''s'",
-             ['SELECT', "'it'", "'s'"]),
+             ['SELECT', "'it''s'"]),
 
             ("Bracketed and backticked identifiers",
              "SELECT [my table], `my col`",
