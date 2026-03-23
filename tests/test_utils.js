@@ -34,6 +34,27 @@ global.fetch = async (url, options) => {
   }
 };
 
+
+async function testShouldTrigger() {
+  console.log('Testing shouldTrigger...');
+  assert.strictEqual(utils.shouldTrigger({ eventName: 'pull_request', payload: {} }, '@codex'), true);
+  assert.strictEqual(
+    utils.shouldTrigger(
+      { eventName: 'issue_comment', payload: { comment: { body: 'Please review this @codex' } } },
+      '@codex'
+    ),
+    true
+  );
+  assert.strictEqual(
+    utils.shouldTrigger(
+      { eventName: 'pull_request_review_comment', payload: { comment: { body: 'Hello @jules' } } },
+      '@codex'
+    ),
+    false
+  );
+  assert.strictEqual(utils.shouldTrigger(null, '@codex'), false);
+}
+
 async function testFormatError() {
   console.log('Testing formatError...');
   assert.strictEqual(utils.formatError('small error'), 'small error');
@@ -50,6 +71,9 @@ async function testFormatError() {
 async function testGetPrInfo() {
   console.log('Testing getPrInfo...');
   const mockGithub = {
+    paginate: async (_method, _options) => ([
+      { filename: 'test.py', patch: '@@ -1,1 +1,1 @@\n-old\n+new' }
+    ]),
     rest: {
       pulls: {
         listFiles: async () => ({
@@ -106,6 +130,7 @@ async function testCallAiApi() {
 
 async function runTests() {
   try {
+    await testShouldTrigger();
     await testFormatError();
     await testGetPrInfo();
     await testCallAiApi();

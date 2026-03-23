@@ -2,6 +2,27 @@
  * Shared utilities for GitHub Actions workflows.
  */
 
+
+/**
+ * Determines whether a workflow should continue for the current event.
+ * For PR events, always continue. For comment-driven events, require the bot handle.
+ * @param {object} context - The context object from actions/github-script.
+ * @param {string} handle - Bot handle to look for, e.g. '@codex'.
+ * @returns {boolean}
+ */
+function shouldTrigger(context, handle) {
+  if (!context || typeof context !== 'object') {
+    return false;
+  }
+
+  if (context.eventName === 'pull_request') {
+    return true;
+  }
+
+  const commentBody = context.payload?.comment?.body;
+  return typeof commentBody === 'string' && commentBody.includes(handle);
+}
+
 /**
  * Extracts PR number and diff from the GitHub context.
  * @param {object} github - The GitHub object from actions/github-script.
@@ -99,6 +120,7 @@ async function callAiApi(url, options) {
 }
 
 module.exports = {
+  shouldTrigger,
   getPrInfo,
   formatError,
   callAiApi
