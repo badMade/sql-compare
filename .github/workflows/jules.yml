@@ -38,7 +38,7 @@ jobs:
             const utils = require('./.github/scripts/utils.js');
 
             try {
-              if (!utils.shouldTrigger(context, '@jules')) {
+              if (typeof utils.shouldTrigger === 'function' && !utils.shouldTrigger(context, '@jules')) {
                 return;
               }
 
