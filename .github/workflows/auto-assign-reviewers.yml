@@ -15,19 +15,61 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const path = require('path');
-            const { requestTeamReviews } = require(path.join(
-              process.env.GITHUB_WORKSPACE || process.cwd(),
-              '.github/scripts/auto-assign-reviewers'
-            ));
+            const teamReviewers = ['team_reviewers'];
+            const prNumber = context.payload.pull_request?.number;
 
-            await requestTeamReviews({
-              github,
-              context,
-              core,
-              teamReviewers: ['team_reviewers'],
-              logger: {
-                info: (message) => console.log(message),
-                error: (message) => console.error(message),
-              },
-            });
+            async function getValidTeams(github, context, requestedTeams) {
+              const validTeams = [];
+              const skippedTeams = [];
+
+              for (const team of requestedTeams) {
+                try {
+                  await github.rest.teams.getByName({
+                    org: context.repo.owner,
+                    team_slug: team,
+                  });
+
+                  await github.rest.teams.checkPermissionsForRepoInOrg({
+                    org: context.repo.owner,
+                    team_slug: team,
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                  });
+
+                  validTeams.push(team);
+                } catch (error) {
+                  skippedTeams.push(team);
+                  console.log('Skipping team review request due to validation failure: ' + (error && error.message ? error.message : String(error)));
+                }
+              }
+
+              return { validTeams, skippedTeams };
+            }
+
+            if (prNumber === undefined) {
+              const errorMessage = 'Pull request number not found in the event payload.';
+              console.error(errorMessage);
+              core.setFailed(errorMessage);
+              return;
+            }
+
+            const { validTeams, skippedTeams } = await getValidTeams(github, context, teamReviewers);
+
+            if (validTeams.length === 0) {
+              console.log(`No valid collaborator teams found to request reviews from. Skipping. Invalid teams count: ${skippedTeams.length}.`);
+              return;
+            }
+
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullRequestNumber,
+                team_reviewers: collaboratorTeamSlugs,
+              });
+              console.log(`Requested reviews from teams: ${collaboratorTeamSlugs.join(', ')}`);
+            } catch (error) {
+              const errorMessage = error && error.message ? error.message : 'Unknown error';
+              console.error(`Failed to assign reviewers: ${errorMessage}`);
+              core.setFailed(`Failed to assign reviewers: ${errorMessage}`);
+            }
