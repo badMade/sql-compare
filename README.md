@@ -100,7 +100,7 @@ The tool transforms both SQL statements before comparison by:
 
 ## AI Code Reviews
 
-This repository includes GitHub Actions for automated code reviews using OpenAI's Codex (GPT-4o) and Google's Gemini 1.5 Pro.
+This repository includes GitHub Actions for automated code reviews using OpenAI's GPT-4o and Google's Gemini 1.5 Pro.
 
 ### Prerequisites
 
