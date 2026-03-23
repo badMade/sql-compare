@@ -98,6 +98,28 @@ The tool transforms both SQL statements before comparison by:
 
 ---
 
+## AI Code Reviews
+
+This repository includes GitHub Actions for automated code reviews using OpenAI's GPT-4o and Google's Gemini 1.5 Pro.
+
+### Prerequisites
+
+1.  **API Keys**:
+    *   Set `OPENAI_API_KEY` in your GitHub repository secrets for Codex reviews.
+    *   Set `GOOGLE_API_KEY` in your GitHub repository secrets for Jules (Gemini) reviews.
+2.  **Labels**:
+    *   To trigger an automatic review on a new or updated Pull Request, add the `safe-for-ai-review` label to the PR.
+3.  **Comments**:
+    *   You can also trigger a review manually by commenting `@codex` or `@jules` on a Pull Request.
+
+### Workflow Configuration
+
+The workflows are defined in:
+*   `.github/workflows/codex.yml`
+*   `.github/workflows/jules.yml`
+
+They use `fetch-depth: 0` to ensure the full history is available if needed, although the current implementation primarily uses the GitHub API to fetch PR file patches. Large PRs are handled via pagination (fetching all files) and passing the diff through a temporary file to avoid environment variable size limits.
+
 ## CI/CD Examples
 
 ### GitHub Actions

@@ -30,7 +30,7 @@ import itertools
 import sys
 from pathlib import Path
 
-SQL_CLAUSE_TERMINATORS = ["WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET", "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"]
+SQL_CLAUSE_TERMINATORS = ['WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT', 'OFFSET', 'QUALIFY', 'WINDOW', 'UNION', 'INTERSECT', 'EXCEPT']
 from collections import Counter
 WHITESPACE_REGEX = re.compile(r'\s+')
 
@@ -44,8 +44,8 @@ try:
 except Exception:
     TK_AVAILABLE = False
 CLAUSE_TERMINATORS = (
-    "WHERE", "GROUP BY", "HAVING", "ORDER BY", "LIMIT", "OFFSET",
-    "QUALIFY", "WINDOW", "UNION", "INTERSECT", "EXCEPT"
+    'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT', 'OFFSET',
+    'QUALIFY', 'WINDOW', 'UNION', 'INTERSECT', 'EXCEPT'
 )
 
 
@@ -61,13 +61,13 @@ def safe_read_file(path_str: str) -> str:
     """Read a file safely, enforcing a size limit to prevent DoS."""
     p = Path(path_str)
     if not p.exists():
-        raise FileNotFoundError(f"File not found: {path_str}")
+        raise FileNotFoundError(f'File not found: {path_str}')
 
     size = p.stat().st_size
     if size > MAX_FILE_SIZE_BYTES:
-        raise ValueError(f"File too large: {path_str} ({size / (1024*1024):.2f} MB). Limit is {MAX_FILE_SIZE_MB} MB.")
+        raise ValueError(f'File too large: {path_str} ({size / (1024*1024):.2f} MB). Limit is {MAX_FILE_SIZE_MB} MB.')
 
-    return p.read_text(encoding="utf-8", errors="ignore")
+    return p.read_text(encoding='utf-8', errors='ignore')
 
 SQL_COMMENT_OR_STRING_REGEX = re.compile(
     r"""
@@ -84,14 +84,14 @@ SQL_COMMENT_OR_STRING_REGEX = re.compile(
 def strip_sql_comments(s: str) -> str:
     """Remove -- line comments and /* ... */ block comments (non-nested)."""
     return SQL_COMMENT_OR_STRING_REGEX.sub(
-        lambda m: "" if m.group(0).startswith(("--", "/*")) else m.group(0),
+        lambda m: '' if m.group(0).startswith(('--', '/*')) else m.group(0),
         s
     )
 
 
 def collapse_whitespace(s: str) -> str:
     """Collapse runs of whitespace to a single space and strip."""
-    return WHITESPACE_REGEX.sub(" ", s).strip()
+    return WHITESPACE_REGEX.sub(' ', s).strip()
 
 
 QUOTED_STRING_REGEX = re.compile(
@@ -119,20 +119,20 @@ def uppercase_outside_quotes(s: str) -> str:
         prev = end
     if prev < len(s):
         out.append(s[prev:].upper())
-    return "".join(out)
+    return ''.join(out)
 
 
 def remove_trailing_semicolon(s: 'Optional[str]') -> 'Optional[str]':
     if s is None:
         return None
     s = s.strip()
-    return s[:-1].strip() if s.endswith(";") else s
+    return s[:-1].strip() if s.endswith(';') else s
 
 
 def remove_outer_parentheses(s: str) -> str:
     """Remove one or more layers of outer wrapping parentheses if they enclose the full statement."""
     def is_wrapped(text: str) -> bool:
-        if not (text.startswith("(") and text.endswith(")")):
+        if not (text.startswith('(') and text.endswith(')')):
             return False
         level = 0; mode = None; i = 0
         while i < len(text):
@@ -170,7 +170,7 @@ def remove_outer_parentheses(s: str) -> str:
     while changed:
         changed = False
         s_stripped = s.strip()
-        if s_stripped.startswith("(") and s_stripped.endswith(")") and is_wrapped(s_stripped):
+        if s_stripped.startswith('(') and s_stripped.endswith(')') and is_wrapped(s_stripped):
             s = s_stripped[1:-1].strip()
             changed = True
     return s
@@ -241,7 +241,7 @@ def split_top_level(s: str, sep: str) -> list:
             prev_idx = m.end()
 
     parts.append(s[last_split:].strip())
-    return [p for p in parts if p != ""]
+    return [p for p in parts if p != '']
 
 
 def top_level_find_kw(sql: str, kw: str, start: int = 0):
@@ -323,15 +323,15 @@ def ws_only_normalize(sql: str) -> str:
 
 
 def _canonicalize_select_list(s: str) -> str:
-    sel_i = top_level_find_kw(s, "SELECT", 0)
+    sel_i = top_level_find_kw(s, 'SELECT', 0)
     if sel_i == -1: return s
-    from_i = top_level_find_kw(s, "FROM", sel_i + 6)
+    from_i = top_level_find_kw(s, 'FROM', sel_i + 6)
     if from_i == -1: return s
     sel_list = s[sel_i + 6:from_i].strip()
-    items = split_top_level(sel_list, ",")
+    items = split_top_level(sel_list, ',')
     if len(items) > 1:
         items_sorted = sorted([collapse_whitespace(it) for it in items], key=lambda z: z.upper())
-        s = s[:sel_i + 6] + " " + ", ".join(items_sorted) + " " + s[from_i:]
+        s = s[:sel_i + 6] + ' ' + ', '.join(items_sorted) + ' ' + s[from_i:]
     return s
 
 def canonicalize_select_list(sql: str) -> str:
@@ -339,15 +339,15 @@ def canonicalize_select_list(sql: str) -> str:
 
 
 def _canonicalize_where_and(s: str) -> str:
-    where_i = top_level_find_kw(s, "WHERE", 0)
+    where_i = top_level_find_kw(s, 'WHERE', 0)
     if where_i == -1: return s
     end_i = clause_end_index(s, where_i + 5)
     body = s[where_i + 5:end_i].strip()
-    terms = split_top_level(body, " AND ")
+    terms = split_top_level(body, ' AND ')
     if len(terms) > 1:
         terms_sorted = sorted([collapse_whitespace(t) for t in terms], key=lambda z: z.upper())
-        new_body = " AND ".join(terms_sorted)
-        s = s[:where_i + 5] + " " + new_body + " " + s[end_i:]
+        new_body = ' AND '.join(terms_sorted)
+        s = s[:where_i + 5] + ' ' + new_body + ' ' + s[end_i:]
     return s
 
 def canonicalize_where_and(sql: str) -> str:
@@ -379,7 +379,7 @@ def _tokenize_from_clause_body(body: str) -> list:
     def add_text(start, end):
         text = collapse_whitespace(body[start:end])
         if text:
-            tokens.append(("TEXT", text))
+            tokens.append(('TEXT', text))
 
     for match in FROM_BODY_TOKENIZER_RE.finditer(body):
         if match.group(1):
@@ -394,10 +394,10 @@ def _tokenize_from_clause_body(body: str) -> list:
             continue
 
         keyword = match.group(4)
-        token_type = "JOINKW"
+        token_type = 'JOINKW'
         if keyword is None:
             keyword = match.group(5)
-            token_type = "CONDKW"
+            token_type = 'CONDKW'
         if keyword is None:
             continue
 
@@ -412,26 +412,26 @@ def _tokenize_from_clause_body(body: str) -> list:
 def _extract_base_table(tokens: list) -> tuple:
     parts = []
     idx = 0
-    while idx < len(tokens) and tokens[idx][0] != "JOINKW":
+    while idx < len(tokens) and tokens[idx][0] != 'JOINKW':
         kind, text = tokens[idx]
-        if kind == "TEXT":
+        if kind == 'TEXT':
             if not parts:
                 parts.append(text.strip())
             else:
                 parts.append(text.rstrip())
         idx += 1
-    return " ".join(parts) if parts else "", idx
+    return ' '.join(parts) if parts else '', idx
 
 
 def _clean_join_type(join_kw: str) -> str:
-    seg_type = join_kw.replace(" OUTER", "").upper()
-    if seg_type.endswith(" JOIN"):
+    seg_type = join_kw.replace(' OUTER', '').upper()
+    if seg_type.endswith(' JOIN'):
         seg_type = seg_type[:-5]
-    elif seg_type == "JOIN":
-        seg_type = ""
+    elif seg_type == 'JOIN':
+        seg_type = ''
     seg_type = seg_type.strip()
-    if seg_type == "":
-        seg_type = "INNER"
+    if seg_type == '':
+        seg_type = 'INNER'
     return seg_type
 
 
@@ -439,35 +439,35 @@ def _extract_join_segments(tokens: list, start_idx: int) -> list:
     segments = []
     idx = start_idx
     while idx < len(tokens):
-        if tokens[idx][0] != "JOINKW":
+        if tokens[idx][0] != 'JOINKW':
             idx += 1; continue
         join_kw = tokens[idx][1]
         idx += 1
 
-        table_text = ""
+        table_text = ''
         cond_kw = None
-        cond_text = ""
+        cond_text = ''
 
-        while idx < len(tokens) and tokens[idx][0] not in ("CONDKW", "JOINKW"):
+        while idx < len(tokens) and tokens[idx][0] not in ('CONDKW', 'JOINKW'):
             k, t = tokens[idx]
-            if k == "TEXT":
-                table_text = (table_text + " " + t).strip()
+            if k == 'TEXT':
+                table_text = (table_text + ' ' + t).strip()
             idx += 1
 
-        if idx < len(tokens) and tokens[idx][0] == "CONDKW":
+        if idx < len(tokens) and tokens[idx][0] == 'CONDKW':
             cond_kw = tokens[idx][1]
             idx += 1
-            while idx < len(tokens) and tokens[idx][0] != "JOINKW":
+            while idx < len(tokens) and tokens[idx][0] != 'JOINKW':
                 k, t = tokens[idx]
-                if k == "TEXT":
-                    cond_text = (cond_text + " " + t).strip()
+                if k == 'TEXT':
+                    cond_text = (cond_text + ' ' + t).strip()
                 idx += 1
 
         segments.append({
-            "type": _clean_join_type(join_kw),
-            "table": collapse_whitespace(table_text),
-            "cond_kw": cond_kw,
-            "cond": collapse_whitespace(cond_text),
+            'type': _clean_join_type(join_kw),
+            'table': collapse_whitespace(table_text),
+            'cond_kw': cond_kw,
+            'cond': collapse_whitespace(cond_text),
         })
     return segments
 
@@ -492,12 +492,12 @@ def _rebuild_from_body(base: str, segments: list) -> str:
     """Rebuild FROM body from base and segments (already normalized)."""
     parts = [base] if base else []
     for seg in segments:
-        join_kw = "JOIN" if seg["type"] == "INNER" else (seg["type"] + " JOIN")
+        join_kw = 'JOIN' if seg['type'] == 'INNER' else (seg['type'] + ' JOIN')
         piece = f"{join_kw} {seg['table']}"
-        if seg["cond_kw"] and seg["cond"]:
+        if seg['cond_kw'] and seg['cond']:
             piece += f" {seg['cond_kw']} {seg['cond']}"
         parts.append(piece)
-    return " ".join(parts)
+    return ' '.join(parts)
 
 
 def _canonicalize_joins(s: str, allow_full_outer: bool = False, allow_left: bool = False) -> str:
@@ -508,7 +508,7 @@ def _canonicalize_joins(s: str, allow_full_outer: bool = False, allow_left: bool
       - LEFT joins (only when allow_left=True)
     RIGHT joins are preserved (not commutative). FULL/LEFT also preserved unless explicitly allowed.
     """
-    from_i = top_level_find_kw(s, "FROM", 0)
+    from_i = top_level_find_kw(s, 'FROM', 0)
     if from_i == -1:
         return s
     end_i = clause_end_index(s, from_i + 4)
@@ -522,25 +522,25 @@ def _canonicalize_joins(s: str, allow_full_outer: bool = False, allow_left: bool
 
     def is_reorderable(t: str) -> bool:
         tt = t.upper()
-        if tt in ("INNER", "CROSS", "NATURAL"):
+        if tt in ('INNER', 'CROSS', 'NATURAL'):
             return True
-        if allow_full_outer and tt == "FULL":
+        if allow_full_outer and tt == 'FULL':
             return True
-        if allow_left and tt == "LEFT":
+        if allow_left and tt == 'LEFT':
             return True
         return False
 
     new_segments = []
-    for is_reo, group in itertools.groupby(segments, key=lambda seg: is_reorderable(seg["type"])):
+    for is_reo, group in itertools.groupby(segments, key=lambda seg: is_reorderable(seg['type'])):
         group_list = list(group)
         if is_reo:
-            group_list.sort(key=lambda z: (z["type"], z["table"].upper(), z.get("cond_kw") or "", z.get("cond") or ""))
+            group_list.sort(key=lambda z: (z['type'], z['table'].upper(), z.get('cond_kw') or '', z.get('cond') or ''))
             new_segments.extend(group_list)
         else:
             new_segments.extend(group_list)
 
     rebuilt = _rebuild_from_body(base, new_segments)
-    s2 = s[:from_i + 4] + " " + rebuilt + " " + s[end_i:]
+    s2 = s[:from_i + 4] + ' ' + rebuilt + ' ' + s[end_i:]
     return collapse_whitespace(s2)
 
 def canonicalize_joins(sql: str, allow_full_outer: bool = False, allow_left: bool = False) -> str:
@@ -567,22 +567,22 @@ def canonicalize_common(sql: str, *, enable_join_reorder: bool = True, allow_ful
 
 def _select_items(sql: str):
     s = collapse_whitespace(sql)
-    si = top_level_find_kw(s, "SELECT", 0)
+    si = top_level_find_kw(s, 'SELECT', 0)
     if si == -1: return []
-    fi = top_level_find_kw(s, "FROM", si + 6)
+    fi = top_level_find_kw(s, 'FROM', si + 6)
     if fi == -1: return []
     lst = s[si + 6:fi].strip()
-    items = [collapse_whitespace(x).upper() for x in split_top_level(lst, ",")]
+    items = [collapse_whitespace(x).upper() for x in split_top_level(lst, ',')]
     return items
 
 
 def _where_and_terms(sql: str):
     s = collapse_whitespace(sql)
-    wi = top_level_find_kw(s, "WHERE", 0)
+    wi = top_level_find_kw(s, 'WHERE', 0)
     if wi == -1: return []
     end = clause_end_index(s, wi + 5)
     body = s[wi + 5:end].strip()
-    terms = [collapse_whitespace(x).upper() for x in split_top_level(body, " AND ")]
+    terms = [collapse_whitespace(x).upper() for x in split_top_level(body, ' AND ')]
     return terms
 
 
@@ -590,7 +590,7 @@ def _join_reorderable_segments(sql: str, enable_join_reorder: bool, allow_full_o
     if not enable_join_reorder:
         return []
     s = collapse_whitespace(sql)
-    fi = top_level_find_kw(s, "FROM", 0)
+    fi = top_level_find_kw(s, 'FROM', 0)
     if fi == -1: return []
     end = clause_end_index(s, fi + 4)
     body = s[fi + 4:end].strip()
@@ -598,13 +598,13 @@ def _join_reorderable_segments(sql: str, enable_join_reorder: bool, allow_full_o
     if not segs: return []
     def is_reo(t: str) -> bool:
         tt = t.upper()
-        return (tt in ("INNER", "CROSS", "NATURAL")
-                or (allow_full_outer and tt == "FULL")
-                or (allow_left and tt == "LEFT"))
+        return (tt in ('INNER', 'CROSS', 'NATURAL')
+                or (allow_full_outer and tt == 'FULL')
+                or (allow_left and tt == 'LEFT'))
     reprs = []
     for seg in segs:
-        if is_reo(seg["type"]):
-            reprs.append((seg["type"].upper(), seg["table"].upper(), (seg.get("cond_kw") or "").upper(), (seg.get("cond") or "").upper()))
+        if is_reo(seg['type']):
+            reprs.append((seg['type'].upper(), seg['table'].upper(), (seg.get('cond_kw') or '').upper(), (seg.get('cond') or '').upper()))
     return reprs
 
 
@@ -621,11 +621,11 @@ def build_difference_summary(norm_a: str, norm_b: str, can_a: str, can_b: str,
             missing = list((ca - cb).elements())
             added   = list((cb - ca).elements())
             if missing:
-                summary.append(f"SELECT list differs: items only in SQL1: {len(missing)}")
+                summary.append(f'SELECT list differs: items only in SQL1: {len(missing)}')
             if added:
-                summary.append(f"SELECT list differs: items only in SQL2: {len(added)}")
+                summary.append(f'SELECT list differs: items only in SQL2: {len(added)}')
         elif sel_a != sel_b:
-            summary.append("SELECT list order differs (same items, different order).")
+            summary.append('SELECT list order differs (same items, different order).')
 
     # WHERE AND analysis
     and_a = _where_and_terms(norm_a); and_b = _where_and_terms(norm_b)
@@ -634,11 +634,11 @@ def build_difference_summary(norm_a: str, norm_b: str, can_a: str, can_b: str,
         missing = list((ca - cb).elements())
         added   = list((cb - ca).elements())
         if missing:
-            summary.append(f"WHERE AND terms differ: terms only in SQL1: {len(missing)}")
+            summary.append(f'WHERE AND terms differ: terms only in SQL1: {len(missing)}')
         if added:
-            summary.append(f"WHERE AND terms differ: terms only in SQL2: {len(added)}")
+            summary.append(f'WHERE AND terms differ: terms only in SQL2: {len(added)}')
     elif and_a != and_b:
-        summary.append("WHERE AND term order differs (same terms, different order).")
+        summary.append('WHERE AND term order differs (same terms, different order).')
 
     # JOIN analysis (only when reordering is enabled)
     if enable_join_reorder:
@@ -650,13 +650,13 @@ def build_difference_summary(norm_a: str, norm_b: str, can_a: str, can_b: str,
                 diff_a = sum((ca - cb).values())
                 diff_b = sum((cb - ca).values())
                 if diff_a:
-                    summary.append(f"Reorderable JOIN components differ: {diff_a} only in SQL1.")
+                    summary.append(f'Reorderable JOIN components differ: {diff_a} only in SQL1.')
                 if diff_b:
-                    summary.append(f"Reorderable JOIN components differ: {diff_b} only in SQL2.")
+                    summary.append(f'Reorderable JOIN components differ: {diff_b} only in SQL2.')
             elif reo_a != reo_b:
-                summary.append("Reorderable JOIN segment order differs (same components, different order).")
+                summary.append('Reorderable JOIN segment order differs (same components, different order).')
     else:
-        summary.append("Join reordering is disabled; join order is considered significant in comparisons.")
+        summary.append('Join reordering is disabled; join order is considered significant in comparisons.')
 
     # Token change counts
     sm = difflib.SequenceMatcher(a=tokens_a, b=tokens_b, autojunk=False)
@@ -666,10 +666,10 @@ def build_difference_summary(norm_a: str, norm_b: str, can_a: str, can_b: str,
         elif tag == 'delete': del_ += (i2 - i1)
         elif tag == 'replace': rep += max(i2 - i1, j2 - j1)
     if ins or del_ or rep:
-        summary.append(f"Token-level changes: +{ins} inserts, -{del_} deletes, ~{rep} replaces.")
+        summary.append(f'Token-level changes: +{ins} inserts, -{del_} deletes, ~{rep} replaces.')
 
     if not summary:
-        summary.append("No structural differences detected beyond normalization.")
+        summary.append('No structural differences detected beyond normalization.')
     return summary
 
 
@@ -694,7 +694,7 @@ def compare_sql(a: str, b: str,
     ws_equal = (ws_a == ws_b)
     ws_diff = "\n".join(difflib.unified_diff(
         ws_a.splitlines(), ws_b.splitlines(),
-        fromfile="sql1(ws)", tofile="sql2(ws)", lineterm=""
+        fromfile='sql1(ws)', tofile='sql2(ws)', lineterm=''
     ))
 
     norm_a = normalize_sql(a)
@@ -704,7 +704,7 @@ def compare_sql(a: str, b: str,
     exact_equal = (tokens_a == tokens_b)
     diff_norm = "\n".join(difflib.unified_diff(
         norm_a.splitlines(), norm_b.splitlines(),
-        fromfile="sql1(norm)", tofile="sql2(norm)", lineterm=""
+        fromfile='sql1(norm)', tofile='sql2(norm)', lineterm=''
     ))
 
     can_a = canonicalize_common(norm_a, enable_join_reorder=enable_join_reorder,
@@ -714,7 +714,7 @@ def compare_sql(a: str, b: str,
     canonical_equal = (can_a == can_b)
     diff_can = "\n".join(difflib.unified_diff(
         can_a.splitlines(), can_b.splitlines(),
-        fromfile="sql1(canon)", tofile="sql2(canon)", lineterm=""
+        fromfile='sql1(canon)', tofile='sql2(canon)', lineterm=''
     ))
 
     summary = build_difference_summary(norm_a, norm_b, can_a, can_b, tokens_a, tokens_b,
@@ -723,11 +723,11 @@ def compare_sql(a: str, b: str,
                                        allow_left=allow_left)
 
     return {
-        "ws_a": ws_a, "ws_b": ws_b, "ws_equal": ws_equal, "diff_ws": ws_diff,
-        "norm_a": norm_a, "norm_b": norm_b, "tokens_a": tokens_a, "tokens_b": tokens_b,
-        "exact_equal": exact_equal, "diff_norm": diff_norm,
-        "can_a": can_a, "can_b": can_b, "canonical_equal": canonical_equal, "diff_can": diff_can,
-        "summary": summary,
+        'ws_a': ws_a, 'ws_b': ws_b, 'ws_equal': ws_equal, 'diff_ws': ws_diff,
+        'norm_a': norm_a, 'norm_b': norm_b, 'tokens_a': tokens_a, 'tokens_b': tokens_b,
+        'exact_equal': exact_equal, 'diff_norm': diff_norm,
+        'can_a': can_a, 'can_b': can_b, 'canonical_equal': canonical_equal, 'diff_can': diff_can,
+        'summary': summary,
     }
 
 
@@ -736,24 +736,24 @@ def compare_sql(a: str, b: str,
 # =============================
 
 def parse_args(argv):
-    p = argparse.ArgumentParser(description="Compare two SQL statements with Exact/Canonical modes and GUI.")
-    p.add_argument("files", nargs="*", help="Two SQL files to compare")
-    p.add_argument("--strings", nargs=2, metavar=("SQL1", "SQL2"), help="Provide two SQL strings inline")
-    p.add_argument("--stdin", action="store_true", help="Read two SQL statements from stdin separated by a line with ---")
-    p.add_argument("--mode", choices=["exact", "canonical", "both"], default="both", help="Comparison mode (default: both)")
-    p.add_argument("--ignore-whitespace", action="store_true", help="Consider queries equal if they differ only by whitespace")
+    p = argparse.ArgumentParser(description='Compare two SQL statements with Exact/Canonical modes and GUI.')
+    p.add_argument('files', nargs='*', help='Two SQL files to compare')
+    p.add_argument('--strings', nargs=2, metavar=('SQL1', 'SQL2'), help='Provide two SQL strings inline')
+    p.add_argument('--stdin', action='store_true', help='Read two SQL statements from stdin separated by a line with ---')
+    p.add_argument('--mode', choices=['exact', 'canonical', 'both'], default='both', help='Comparison mode (default: both)')
+    p.add_argument('--ignore-whitespace', action='store_true', help='Consider queries equal if they differ only by whitespace')
 
     # Global join reordering toggle (default ON) + fine-grained flags
     jg = p.add_mutually_exclusive_group()
-    jg.add_argument("--join-reorder", dest="join_reorder", action="store_true", help="Enable join reordering (default)")
-    jg.add_argument("--no-join-reorder", dest="join_reorder", action="store_false", help="Disable join reordering")
+    jg.add_argument('--join-reorder', dest='join_reorder', action='store_true', help='Enable join reordering (default)')
+    jg.add_argument('--no-join-reorder', dest='join_reorder', action='store_false', help='Disable join reordering')
     p.set_defaults(join_reorder=True)
 
-    p.add_argument("--allow-full-outer-reorder", action="store_true", help="When join reordering is enabled, allow FULL OUTER JOIN reordering (heuristic)")
-    p.add_argument("--allow-left-reorder", action="store_true", help="When join reordering is enabled, allow LEFT JOIN reordering (heuristic)")
+    p.add_argument('--allow-full-outer-reorder', action='store_true', help='When join reordering is enabled, allow FULL OUTER JOIN reordering (heuristic)')
+    p.add_argument('--allow-left-reorder', action='store_true', help='When join reordering is enabled, allow LEFT JOIN reordering (heuristic)')
 
-    p.add_argument("--report", help="Write a comparison report to this file (html or txt)")
-    p.add_argument("--report-format", choices=["html", "txt"], default="html", help="Report format (default: html)")
+    p.add_argument('--report', help='Write a comparison report to this file (html or txt)')
+    p.add_argument('--report-format', choices=['html', 'txt'], default='html', help='Report format (default: html)')
     return p.parse_args(argv)
 
 
@@ -761,82 +761,82 @@ def read_from_stdin_two_parts():
     # Prevent DoS from unbounded piped input
     raw = sys.stdin.read(MAX_FILE_SIZE_BYTES + 1)
     if len(raw) > MAX_FILE_SIZE_BYTES:
-        raise ValueError(f"Input too large. Limit is {MAX_FILE_SIZE_MB} MB.")
+        raise ValueError(f'Input too large. Limit is {MAX_FILE_SIZE_MB} MB.')
     parts = re.split(r"^\s*---\s*$", raw, flags=re.M)
     if len(parts) != 2:
-        raise ValueError("When using --stdin, provide exactly two parts separated by a line containing only ---")
+        raise ValueError('When using --stdin, provide exactly two parts separated by a line containing only ---')
     return parts[0].strip(), parts[1].strip()
 
 
 def load_inputs(args):
     if args.strings:
-        return args.strings[0], args.strings[1], "strings"
+        return args.strings[0], args.strings[1], 'strings'
     if args.stdin:
         a, b = read_from_stdin_two_parts()
-        return a, b, "stdin"
+        return a, b, 'stdin'
     if args.files and len(args.files) == 2:
         f1, f2 = args.files
         a = safe_read_file(f1)
         b = safe_read_file(f2)
-        return a, b, "files"
+        return a, b, 'files'
     return None, None, None
 
 
 def print_result_and_exit(result: dict, mode: str, ignore_ws: bool):
-    print("=== SQL Compare ===")
+    print('=== SQL Compare ===')
     print(f"Whitespace-only equal: {'YES' if result['ws_equal'] else 'NO'}")
     print(f"Exact tokens equal   : {'YES' if result['exact_equal'] else 'NO'}")
     print(f"Canonical equal      : {'YES' if result['canonical_equal'] else 'NO'}")
     print("\n-- Summary of differences --")
-    for line in result["summary"]:
-        print(f"- {line}")
+    for line in result['summary']:
+        print(f'- {line}')
     print()
 
     if ignore_ws:
-        print("---- Unified Diff (Whitespace-only normalized) ----")
-        print(result["diff_ws"] if result["diff_ws"] else "(no differences)")
+        print('---- Unified Diff (Whitespace-only normalized) ----')
+        print(result['diff_ws'] if result['diff_ws'] else '(no differences)')
         print()
-    if mode in ("both", "exact"):
-        print("---- Unified Diff (Normalized) ----")
-        print(result["diff_norm"] if result["diff_norm"] else "(no differences)")
+    if mode in ('both', 'exact'):
+        print('---- Unified Diff (Normalized) ----')
+        print(result['diff_norm'] if result['diff_norm'] else '(no differences)')
         print()
-    if mode in ("both", "canonical"):
-        print("---- Unified Diff (Canonicalized) ----")
-        print(result["diff_can"] if result["diff_can"] else "(no differences)")
+    if mode in ('both', 'canonical'):
+        print('---- Unified Diff (Canonicalized) ----')
+        print(result['diff_can'] if result['diff_can'] else '(no differences)')
         print()
 
-    if mode == "exact":
-        success = (result["ws_equal"] if ignore_ws else result["exact_equal"])
+    if mode == 'exact':
+        success = (result['ws_equal'] if ignore_ws else result['exact_equal'])
     else:
-        success = result["canonical_equal"]
+        success = result['canonical_equal']
     sys.exit(0 if success else 1)
 
 
 def generate_report(result: dict, mode: str, fmt: str, out_path: str, ignore_ws: bool):
-    if fmt == "txt":
+    if fmt == 'txt':
         lines = []
-        lines.append("=== SQL Compare Report ===")
+        lines.append('=== SQL Compare Report ===')
         lines.append(f"Whitespace-only equal: {'YES' if result['ws_equal'] else 'NO'}")
         lines.append(f"Exact tokens equal   : {'YES' if result['exact_equal'] else 'NO'}")
         lines.append(f"Canonical equal      : {'YES' if result['canonical_equal'] else 'NO'}")
-        lines.append("")
-        lines.append("-- Summary of differences --")
-        for line in result["summary"]:
-            lines.append(f"- {line}")
-        lines.append("")
+        lines.append('')
+        lines.append('-- Summary of differences --')
+        for line in result['summary']:
+            lines.append(f'- {line}')
+        lines.append('')
         if ignore_ws:
-            lines.append("---- Unified Diff (Whitespace-only normalized) ----")
-            lines.append(result["diff_ws"] if result["diff_ws"] else "(no differences)")
-            lines.append("")
-        if mode in ("both", "exact"):
-            lines.append("---- Unified Diff (Normalized) ----")
-            lines.append(result["diff_norm"] if result["diff_norm"] else "(no differences)")
-            lines.append("")
-        if mode in ("both", "canonical"):
-            lines.append("---- Unified Diff (Canonicalized) ----")
-            lines.append(result["diff_can"] if result["diff_can"] else "(no differences)")
-            lines.append("")
-        Path(out_path).write_text("\n".join(lines), encoding="utf-8")
+            lines.append('---- Unified Diff (Whitespace-only normalized) ----')
+            lines.append(result['diff_ws'] if result['diff_ws'] else '(no differences)')
+            lines.append('')
+        if mode in ('both', 'exact'):
+            lines.append('---- Unified Diff (Normalized) ----')
+            lines.append(result['diff_norm'] if result['diff_norm'] else '(no differences)')
+            lines.append('')
+        if mode in ('both', 'canonical'):
+            lines.append('---- Unified Diff (Canonicalized) ----')
+            lines.append(result['diff_can'] if result['diff_can'] else '(no differences)')
+            lines.append('')
+        Path(out_path).write_text('\n'.join(lines), encoding='utf-8')
         return
 
     # HTML (color-coded)
@@ -849,18 +849,18 @@ def generate_report(result: dict, mode: str, fmt: str, out_path: str, ignore_ws:
         return f"<h2>{html_mod.escape(title)}</h2>\n{table}"
 
     sections = []
-    sections.append("<h1>SQL Compare Report</h1>")
-    sections.append("<h2>Summary</h2>")
-    sections.append("<ul>")
+    sections.append('<h1>SQL Compare Report</h1>')
+    sections.append('<h2>Summary</h2>')
+    sections.append('<ul>')
     sections.append(f"<li>Whitespace-only equal: <b>{'YES' if result['ws_equal'] else 'NO'}</b></li>")
     sections.append(f"<li>Exact tokens equal: <b>{'YES' if result['exact_equal'] else 'NO'}</b></li>")
     sections.append(f"<li>Canonical equal: <b>{'YES' if result['canonical_equal'] else 'NO'}</b></li>")
-    sections.append("</ul>")
+    sections.append('</ul>')
 
     sections.append("""
     <h2>Summary of differences</h2>
     <ul>
-    """ + "\n".join(f"<li>{html_mod.escape(line)}</li>" for line in result["summary"]) + "</ul>")
+    """ + '\n'.join(f'<li>{html_mod.escape(line)}</li>' for line in result['summary']) + '</ul>')
 
     sections.append("""
     <div style="margin:8px 0;">
@@ -872,11 +872,11 @@ def generate_report(result: dict, mode: str, fmt: str, out_path: str, ignore_ws:
     """)
 
     if ignore_ws:
-        sections.append(mk("Whitespace-only Diff", result["ws_a"], result["ws_b"], "sql1(ws)", "sql2(ws)"))
-    if mode in ("both", "exact"):
-        sections.append(mk("Normalized Diff", result["norm_a"], result["norm_b"], "sql1(norm)", "sql2(norm)"))
-    if mode in ("both", "canonical"):
-        sections.append(mk("Canonicalized Diff", result["can_a"], result["can_b"], "sql1(canon)", "sql2(canon)"))
+        sections.append(mk('Whitespace-only Diff', result['ws_a'], result['ws_b'], 'sql1(ws)', 'sql2(ws)'))
+    if mode in ('both', 'exact'):
+        sections.append(mk('Normalized Diff', result['norm_a'], result['norm_b'], 'sql1(norm)', 'sql2(norm)'))
+    if mode in ('both', 'canonical'):
+        sections.append(mk('Canonicalized Diff', result['can_a'], result['can_b'], 'sql1(canon)', 'sql2(canon)'))
 
     html_out = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>SQL Compare Report</title>
@@ -896,7 +896,7 @@ table.diff thead th {{ background: #f6f8fa; }}
 </head><body>
 {''.join(sections)}
 </body></html>"""
-    Path(out_path).write_text(html_out, encoding="utf-8")
+    Path(out_path).write_text(html_out, encoding='utf-8')
 
 
 # =============================
@@ -906,12 +906,12 @@ table.diff thead th {{ background: #f6f8fa; }}
 class SQLCompareGUI:
     def __init__(self, root):
         self.root = root
-        root.title("SQL Compare")
-        root.geometry("980x780")
+        root.title('SQL Compare')
+        root.geometry('980x780')
 
         self.sql1_path = tk.StringVar()
         self.sql2_path = tk.StringVar()
-        self.mode = tk.StringVar(value="both")
+        self.mode = tk.StringVar(value='both')
         self.ignore_ws = tk.BooleanVar(value=False)
         self.enable_join = tk.BooleanVar(value=True)
         self.allow_full = tk.BooleanVar(value=False)
@@ -922,7 +922,7 @@ class SQLCompareGUI:
         self.last_result = None  # cache for report generation
 
     def _create_widgets(self):
-        pad = {"padx": 8, "pady": 6}
+        pad = {'padx': 8, 'pady': 6}
 
         self._create_top_frame(pad)
         self._create_mode_frame(pad)
@@ -930,63 +930,63 @@ class SQLCompareGUI:
         self._create_buttons_frame(pad)
         self._create_output_frame(pad)
 
-        ttk.Label(self.root, text="Tip: CLI supports --strings/--stdin, --mode, --ignore-whitespace, --join-reorder/--no-join-reorder, --allow-full-outer-reorder, --allow-left-reorder, and --report.").pack(anchor="w", padx=8, pady=4)
+        ttk.Label(self.root, text='Tip: CLI supports --strings/--stdin, --mode, --ignore-whitespace, --join-reorder/--no-join-reorder, --allow-full-outer-reorder, --allow-left-reorder, and --report.').pack(anchor='w', padx=8, pady=4)
 
     def _create_top_frame(self, pad):
         frm_top = ttk.Frame(self.root)
-        frm_top.pack(fill="x", **pad)
-        ttk.Label(frm_top, text="SQL File 1:").grid(row=0, column=0, sticky="w")
+        frm_top.pack(fill='x', **pad)
+        ttk.Label(frm_top, text='SQL File 1:').grid(row=0, column=0, sticky='w')
         e1 = ttk.Entry(frm_top, textvariable=self.sql1_path, width=90)
-        e1.grid(row=0, column=1, sticky="we", padx=(8, 8))
-        ttk.Button(frm_top, text="Browse...", command=self.browse1).grid(row=0, column=2)
-        ttk.Label(frm_top, text="SQL File 2:").grid(row=1, column=0, sticky="w")
-        e2 = ttk.Entry(frm_top, textvariable=self.sql2_path, width=90); e2.grid(row=1, column=1, sticky="we", padx=(8, 8))
-        ttk.Button(frm_top, text="Browse...", command=self.browse2).grid(row=1, column=2)
+        e1.grid(row=0, column=1, sticky='we', padx=(8, 8))
+        ttk.Button(frm_top, text='Browse...', command=self.browse1).grid(row=0, column=2)
+        ttk.Label(frm_top, text='SQL File 2:').grid(row=1, column=0, sticky='w')
+        e2 = ttk.Entry(frm_top, textvariable=self.sql2_path, width=90); e2.grid(row=1, column=1, sticky='we', padx=(8, 8))
+        ttk.Button(frm_top, text='Browse...', command=self.browse2).grid(row=1, column=2)
         frm_top.columnconfigure(1, weight=1)
 
     def _create_mode_frame(self, pad):
         frm_mode = ttk.Frame(self.root)
-        frm_mode.pack(fill="x", **pad)
-        ttk.Label(frm_mode, text="Mode:").pack(side="left")
-        for text, val in [("Both", "both"), ("Exact", "exact"), ("Canonical", "canonical")]:
-            ttk.Radiobutton(frm_mode, text=text, value=val, variable=self.mode).pack(side="left", padx=6)
-        ttk.Checkbutton(frm_mode, text="Ignore whitespace differences", variable=self.ignore_ws).pack(side="left", padx=16)
+        frm_mode.pack(fill='x', **pad)
+        ttk.Label(frm_mode, text='Mode:').pack(side='left')
+        for text, val in [('Both', 'both'), ('Exact', 'exact'), ('Canonical', 'canonical')]:
+            ttk.Radiobutton(frm_mode, text=text, value=val, variable=self.mode).pack(side='left', padx=6)
+        ttk.Checkbutton(frm_mode, text='Ignore whitespace differences', variable=self.ignore_ws).pack(side='left', padx=16)
 
     def _create_flags_frame(self, pad):
         frm_flags = ttk.Frame(self.root)
-        frm_flags.pack(fill="x", **pad)
-        self.chk_enable_join = ttk.Checkbutton(frm_flags, text="Enable join reordering", variable=self.enable_join, command=self._toggle_join_options)
-        self.chk_enable_join.pack(side="left", padx=6)
-        self.chk_full = ttk.Checkbutton(frm_flags, text="Allow FULL OUTER JOIN reordering (heuristic)", variable=self.allow_full)
-        self.chk_full.pack(side="left", padx=6)
-        self.chk_left = ttk.Checkbutton(frm_flags, text="Allow LEFT JOIN reordering (heuristic)", variable=self.allow_left)
-        self.chk_left.pack(side="left", padx=6)
+        frm_flags.pack(fill='x', **pad)
+        self.chk_enable_join = ttk.Checkbutton(frm_flags, text='Enable join reordering', variable=self.enable_join, command=self._toggle_join_options)
+        self.chk_enable_join.pack(side='left', padx=6)
+        self.chk_full = ttk.Checkbutton(frm_flags, text='Allow FULL OUTER JOIN reordering (heuristic)', variable=self.allow_full)
+        self.chk_full.pack(side='left', padx=6)
+        self.chk_left = ttk.Checkbutton(frm_flags, text='Allow LEFT JOIN reordering (heuristic)', variable=self.allow_left)
+        self.chk_left.pack(side='left', padx=6)
         self._toggle_join_options()  # set initial state
 
     def _create_buttons_frame(self, pad):
         frm_btns = ttk.Frame(self.root)
-        frm_btns.pack(fill="x", **pad)
-        ttk.Button(frm_btns, text="Compare", command=self.do_compare).pack(side="left")
-        self.btn_copy = ttk.Button(frm_btns, text="Copy Output", command=self.copy_output)
-        self.btn_copy.pack(side="left", padx=6)
+        frm_btns.pack(fill='x', **pad)
+        ttk.Button(frm_btns, text='Compare', command=self.do_compare).pack(side='left')
+        self.btn_copy = ttk.Button(frm_btns, text='Copy Output', command=self.copy_output)
+        self.btn_copy.pack(side='left', padx=6)
         self.btn_copy.state(['disabled'])
-        self.btn_clear = ttk.Button(frm_btns, text="Clear", command=self.clear_output)
-        self.btn_clear.pack(side="left", padx=6)
+        self.btn_clear = ttk.Button(frm_btns, text='Clear', command=self.clear_output)
+        self.btn_clear.pack(side='left', padx=6)
         self.btn_clear.state(['disabled'])
-        self.btn_save = ttk.Button(frm_btns, text="Save Report…", command=self.save_report)
-        self.btn_save.pack(side="left", padx=6)
+        self.btn_save = ttk.Button(frm_btns, text='Save Report…', command=self.save_report)
+        self.btn_save.pack(side='left', padx=6)
         self.btn_save.state(['disabled'])
 
     def _create_output_frame(self, pad):
         frm_out = ttk.Frame(self.root)
-        frm_out.pack(fill="both", expand=True, **pad)
-        self.txt = tk.Text(frm_out, wrap="none", font=("Consolas", 10))
-        xscroll = ttk.Scrollbar(frm_out, orient="horizontal", command=self.txt.xview)
-        yscroll = ttk.Scrollbar(frm_out, orient="vertical", command=self.txt.yview)
+        frm_out.pack(fill='both', expand=True, **pad)
+        self.txt = tk.Text(frm_out, wrap='none', font=('Consolas', 10))
+        xscroll = ttk.Scrollbar(frm_out, orient='horizontal', command=self.txt.xview)
+        yscroll = ttk.Scrollbar(frm_out, orient='vertical', command=self.txt.yview)
         self.txt.configure(xscrollcommand=xscroll.set, yscrollcommand=yscroll.set)
-        self.txt.grid(row=0, column=0, sticky="nsew")
-        yscroll.grid(row=0, column=1, sticky="ns")
-        xscroll.grid(row=1, column=0, sticky="ew")
+        self.txt.grid(row=0, column=0, sticky='nsew')
+        yscroll.grid(row=0, column=1, sticky='ns')
+        xscroll.grid(row=1, column=0, sticky='ew')
         frm_out.rowconfigure(0, weight=1); frm_out.columnconfigure(0, weight=1)
 
         def _readonly_handler(event):
@@ -1005,21 +1005,21 @@ class SQLCompareGUI:
                 return None
             if event.keysym.lower() in ('c', 'a') and (event.state & (CTRL_MASK | MOD1_MASK)):
                 return None
-            return "break"
+            return 'break'
 
         def _focus_next(event):
             event.widget.tk_focusNext().focus_set()
-            return "break"
+            return 'break'
 
         def _focus_prev(event):
             event.widget.tk_focusPrev().focus_set()
-            return "break"
+            return 'break'
 
-        self.txt.bind("<Key>", _readonly_handler)
-        self.txt.bind("<Tab>", _focus_next)
-        self.txt.bind("<ISO_Left_Tab>", _focus_prev)
-        self.txt.tag_configure("empty", foreground="gray", justify="center")
-        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
+        self.txt.bind('<Key>', _readonly_handler)
+        self.txt.bind('<Tab>', _focus_next)
+        self.txt.bind('<ISO_Left_Tab>', _focus_prev)
+        self.txt.tag_configure('empty', foreground='gray', justify='center')
+        self.txt.insert('1.0', 'Select files and click Compare to see results here.', 'empty')
 
     def _toggle_join_options(self):
         # Enable/disable dependent flags based on global join toggle
@@ -1031,18 +1031,18 @@ class SQLCompareGUI:
             self.chk_left.state(['disabled'])
 
     def browse1(self):
-        path = filedialog.askopenfilename(title="Select SQL File 1",
-                                          filetypes=[("SQL files", "*.sql *.txt"), ("All files", "*.*")])
+        path = filedialog.askopenfilename(title='Select SQL File 1',
+                                          filetypes=[('SQL files', '*.sql *.txt'), ('All files', '*.*')])
         if path: self.sql1_path.set(path)
 
     def browse2(self):
-        path = filedialog.askopenfilename(title="Select SQL File 2",
-                                          filetypes=[("SQL files", "*.sql *.txt"), ("All files", "*.*")])
+        path = filedialog.askopenfilename(title='Select SQL File 2',
+                                          filetypes=[('SQL files', '*.sql *.txt'), ('All files', '*.*')])
         if path: self.sql2_path.set(path)
 
     def clear_output(self):
-        self.txt.delete("1.0", "end")
-        self.txt.insert("1.0", "Select files and click Compare to see results here.", "empty")
+        self.txt.delete('1.0', 'end')
+        self.txt.insert('1.0', 'Select files and click Compare to see results here.', 'empty')
         self.btn_copy.state(['disabled'])
         self.btn_clear.state(['disabled'])
         self.btn_save.state(['disabled'])
@@ -1050,18 +1050,18 @@ class SQLCompareGUI:
 
     def copy_output(self):
         try:
-            content = self.txt.get("1.0", "end-1c")
+            content = self.txt.get('1.0', 'end-1c')
             self.root.clipboard_clear(); self.root.clipboard_append(content)
-            messagebox.showinfo("Copied", "Output copied to clipboard.")
+            messagebox.showinfo('Copied', 'Output copied to clipboard.')
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to copy: {e}")
+            messagebox.showerror('Error', f'Failed to copy: {e}')
 
     def do_compare(self):
         p1 = self.sql1_path.get().strip(); p2 = self.sql2_path.get().strip()
         if not p1 or not p2:
-            messagebox.showwarning("Missing files", "Please select both SQL files."); return
+            messagebox.showwarning('Missing files', 'Please select both SQL files.'); return
         if not os.path.exists(p1) or not os.path.exists(p2):
-            messagebox.showerror("File error", "One or both files do not exist."); return
+            messagebox.showerror('File error', 'One or both files do not exist.'); return
         try:
             a = safe_read_file(p1)
             b = safe_read_file(p2)
@@ -1075,59 +1075,59 @@ class SQLCompareGUI:
             self.last_result = result
             self.render_result(result, self.mode.get(), self.ignore_ws.get())
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            messagebox.showerror('Error', str(e))
 
     def render_result(self, result: dict, mode: str, ignore_ws: bool):
-        self.txt.delete("1.0", "end")
+        self.txt.delete('1.0', 'end')
         self.btn_copy.state(['!disabled'])
         self.btn_clear.state(['!disabled'])
         self.btn_save.state(['!disabled'])
         lines = []
-        lines.append("=== SQL Compare ===")
+        lines.append('=== SQL Compare ===')
         lines.append(f"Whitespace-only equal: {'YES' if result['ws_equal'] else 'NO'}")
         lines.append(f"Exact tokens equal   : {'YES' if result['exact_equal'] else 'NO'}")
         lines.append(f"Canonical equal      : {'YES' if result['canonical_equal'] else 'NO'}")
-        lines.append("")
-        lines.append("-- Summary of differences --")
-        for line in result["summary"]:
-            lines.append(f"- {line}")
-        lines.append("")
+        lines.append('')
+        lines.append('-- Summary of differences --')
+        for line in result['summary']:
+            lines.append(f'- {line}')
+        lines.append('')
         if ignore_ws:
-            lines.append("---- Unified Diff (Whitespace-only normalized) ----")
-            lines.append(result["diff_ws"] if result["diff_ws"] else "(no differences)"); lines.append("")
-        if mode in ("both", "exact"):
-            lines.append("---- Unified Diff (Normalized) ----")
-            lines.append(result["diff_norm"] if result["diff_norm"] else "(no differences)"); lines.append("")
-        if mode in ("both", "canonical"):
-            lines.append("---- Unified Diff (Canonicalized) ----")
-            lines.append(result["diff_can"] if result["diff_can"] else "(no differences)"); lines.append("")
-        self.txt.insert("1.0", "\n".join(lines))
+            lines.append('---- Unified Diff (Whitespace-only normalized) ----')
+            lines.append(result['diff_ws'] if result['diff_ws'] else '(no differences)'); lines.append('')
+        if mode in ('both', 'exact'):
+            lines.append('---- Unified Diff (Normalized) ----')
+            lines.append(result['diff_norm'] if result['diff_norm'] else '(no differences)'); lines.append('')
+        if mode in ('both', 'canonical'):
+            lines.append('---- Unified Diff (Canonicalized) ----')
+            lines.append(result['diff_can'] if result['diff_can'] else '(no differences)'); lines.append('')
+        self.txt.insert('1.0', "\n".join(lines))
 
     def save_report(self):
         if not self.last_result:
-            messagebox.showwarning("No results", "Run a comparison first."); return
+            messagebox.showwarning('No results', 'Run a comparison first.'); return
         path = filedialog.asksaveasfilename(
-            title="Save Report",
-            defaultextension=".html",
-            filetypes=[("HTML report", "*.html"), ("Text report", "*.txt")]
+            title='Save Report',
+            defaultextension='.html',
+            filetypes=[('HTML report', '*.html'), ('Text report', '*.txt')]
         )
         if not path:
             return
-        fmt = "html" if path.lower().endswith(".html") else "txt"
+        fmt = 'html' if path.lower().endswith('.html') else 'txt'
         try:
             mode = self.mode.get()
             ignore_ws = self.ignore_ws.get()
             generate_report(self.last_result, mode, fmt, path, ignore_ws)
-            messagebox.showinfo("Saved", f"Report saved to:\n{path}")
+            messagebox.showinfo('Saved', f"Report saved to:\n{path}")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to save report:\n{e}")
+            messagebox.showerror('Error', f"Failed to save report:\n{e}")
 
 
 def maybe_launch_gui(args_parsed) -> bool:
     """Return True if GUI launched and program should exit afterward."""
     if (args_parsed.files is None or len(args_parsed.files) == 0) and not args_parsed.strings and not args_parsed.stdin:
         if not TK_AVAILABLE:
-            print("Tkinter is not available. Provide CLI inputs, or install Python with Tk support.", file=sys.stderr)
+            print('Tkinter is not available. Provide CLI inputs, or install Python with Tk support.', file=sys.stderr)
             sys.exit(2)
         root = tk.Tk()
         SQLCompareGUI(root)
@@ -1141,7 +1141,7 @@ def main(argv=None):
     if maybe_launch_gui(args): return
     a, b, src = load_inputs(args)
     if a is None or b is None:
-        print("Provide two files, or --strings, or --stdin; or run with no args to open the GUI.", file=sys.stderr)
+        print('Provide two files, or --strings, or --stdin; or run with no args to open the GUI.', file=sys.stderr)
         sys.exit(2)
     result = compare_sql(
         a, b,
@@ -1153,12 +1153,12 @@ def main(argv=None):
     if args.report:
         try:
             generate_report(result, args.mode, args.report_format, args.report, args.ignore_whitespace)
-            print(f"[Report] Saved to: {args.report}")
+            print(f'[Report] Saved to: {args.report}')
         except Exception as e:
-            print(f"[Report] Failed: {e}", file=sys.stderr)
+            print(f'[Report] Failed: {e}', file=sys.stderr)
             sys.exit(2)
     print_result_and_exit(result, args.mode, args.ignore_whitespace)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
