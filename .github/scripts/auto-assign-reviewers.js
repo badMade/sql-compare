@@ -57,8 +57,7 @@ async function findRequestableTeams(github, context, prNumber, configuredTeamRev
 }
 
 async function requestTeamReviews({ github, context, core, teamReviewers, logger = console }) {
-  const pullRequest = context && context.payload ? context.payload.pull_request : undefined;
-  const prNumber = pullRequest ? pullRequest.number : undefined;
+  const prNumber = context?.payload?.pull_request?.number;
 
   if (!pullRequest || typeof prNumber !== 'number') {
     const message = 'Pull request number not found in the workflow payload.';
