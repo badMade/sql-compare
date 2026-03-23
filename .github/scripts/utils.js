@@ -9,7 +9,7 @@
  * @param {object} core - The core object from actions/github-script.
  * @returns {Promise<{prNumber: number, diff: string}>}
  */
-async function getPrInfo(github, context, core) {
+async function getPrInfo(github, context) {
   const prNumber = context.payload.pull_request?.number || context.payload.issue?.number;
   if (!prNumber || !Number.isInteger(Number(prNumber))) {
     throw new Error('Could not determine a valid PR number');
