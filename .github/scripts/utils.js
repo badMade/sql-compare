@@ -67,7 +67,7 @@ function formatError(error, maxLength = 200) {
  * @param {object} core - The core object from actions/github-script.
  * @returns {Promise<object>}
  */
-async function callAiApi(url, options, core) {
+async function callAiApi(url, options) {
   const response = await fetch(url, options);
 
   if (!response.ok) {
