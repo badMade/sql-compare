@@ -99,6 +99,8 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PR_NUMBER: ${{ steps.diff.outputs.pr_number }}
+          PR_TITLE: ${{ steps.diff.outputs.pr_title }}
+          PR_BODY: ${{ steps.diff.outputs.pr_body }}
         with:
           script: |
             const fs = require('fs');
