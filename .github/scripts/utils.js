@@ -19,6 +19,10 @@ function shouldTrigger(context, handle) {
     return true;
   }
 
+  // For comment-driven events, require a non-empty handle to avoid matching all comments.
+  if (typeof handle !== 'string' || handle.length === 0) {
+    return false;
+  }
   const commentBody = context.payload?.comment?.body;
   return typeof commentBody === 'string' && commentBody.includes(handle);
 }
