@@ -10,33 +10,37 @@ def process_files_to_diff(files):
     )
 
 class TestDiffLogic(unittest.TestCase):
-    def test_combine_multiple_files(self):
-        files = [
-            {'filename': 'file1.txt', 'patch': '@@ -1 +1 @@\n-old\n+new'},
-            {'filename': 'file2.txt', 'patch': '@@ -2 +2 @@\n-foo\n+bar'}
+    def test_all_scenarios(self):
+        test_cases = [
+            (
+                "multiple_files",
+                [
+                    {'filename': 'file1.txt', 'patch': '@@ -1 +1 @@\n-old\n+new'},
+                    {'filename': 'file2.txt', 'patch': '@@ -2 +2 @@\n-foo\n+bar'}
+                ],
+                ("--- file1.txt\n+++ file1.txt\n@@ -1 +1 @@\n-old\n+new\n\n"
+                 "--- file2.txt\n+++ file2.txt\n@@ -2 +2 @@\n-foo\n+bar")
+            ),
+            (
+                "binary_file",
+                [{'filename': 'image.png', 'patch': None}],
+                "--- image.png\n+++ image.png\n(binary or no changes)"
+            ),
+            (
+                "no_changes",
+                [{'filename': 'empty.txt', 'patch': ''}],
+                "--- empty.txt\n+++ empty.txt\n(binary or no changes)"
+            ),
+            (
+                "empty_file_list",
+                [],
+                ""
+            ),
         ]
-        expected = (
-            "--- file1.txt\n+++ file1.txt\n@@ -1 +1 @@\n-old\n+new\n\n"
-            "--- file2.txt\n+++ file2.txt\n@@ -2 +2 @@\n-foo\n+bar"
-        )
-        self.assertEqual(process_files_to_diff(files), expected)
 
-    def test_handle_binary_file(self):
-        files = [
-            {'filename': 'image.png', 'patch': None}
-        ]
-        expected = "--- image.png\n+++ image.png\n(binary or no changes)"
-        self.assertEqual(process_files_to_diff(files), expected)
-
-    def test_handle_no_changes(self):
-        files = [
-            {'filename': 'empty.txt', 'patch': ''}
-        ]
-        expected = "--- empty.txt\n+++ empty.txt\n(binary or no changes)"
-        self.assertEqual(process_files_to_diff(files), expected)
-
-    def test_empty_file_list(self):
-        self.assertEqual(process_files_to_diff([]), "")
+        for name, files, expected in test_cases:
+            with self.subTest(name=name):
+                self.assertEqual(process_files_to_diff(files), expected)
 
 if __name__ == '__main__':
     unittest.main()
