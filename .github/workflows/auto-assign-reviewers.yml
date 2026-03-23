@@ -39,7 +39,7 @@ jobs:
                   validTeams.push(team);
                 } catch (error) {
                   skippedTeams.push(team);
-                  console.log(`Skipping team review request due to validation failure: ${error.message}`);
+                  console.log('Skipping team review request due to validation failure: ' + (error && error.message ? error.message : String(error)));
                 }
               }
 
