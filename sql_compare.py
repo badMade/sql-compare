@@ -178,10 +178,10 @@ def remove_outer_parentheses(s: str) -> str:
 
 TOKEN_REGEX = re.compile(
     r"""
-    (?:'(?:(?:''|[^'])*?)')            # single-quoted string
-  | (?:(?:(?:\bE)?")(?:(?:""|[^"])*?)")  # double-quoted string (allow E"..." too)
-  | (?:\[(?:[^\]]*?)\])                # [bracketed] identifier
-  | (?:`(?:[^`]*?)`)                   # `backticked` identifier
+    (?:'(?:(?:''|[^'])*)')            # single-quoted string
+  | (?:(?:(?:\bE)?")(?:(?:""|[^"])*)")  # double-quoted string (allow E"..." too)
+  | (?:\[(?:[^\]]*)\])                # [bracketed] identifier
+  | (?:`(?:[^`]*)`)                   # `backticked` identifier
   | (?:[A-Z_][A-Z0-9_\$]*\b)           # identifiers/keywords (after uppercasing)
   | (?:[0-9]+\.[0-9]+|[0-9]+)          # numbers
   | (?:<=|>=|<>|!=|:=|->|::)           # multi-char operators
