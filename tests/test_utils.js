@@ -42,6 +42,9 @@ async function testFormatError() {
   assert.strictEqual(utils.formatError(longError, 200), 'a'.repeat(200) + '... (truncated)');
   assert.strictEqual(utils.formatError({ message: 'obj error' }), 'obj error');
   assert.strictEqual(utils.formatError({ foo: 'bar' }), '{"foo":"bar"}');
+  const circular = {};
+  circular.ref = circular;
+  assert.strictEqual(utils.formatError(circular), '[object Object]');
 }
 
 async function testGetPrInfo() {
