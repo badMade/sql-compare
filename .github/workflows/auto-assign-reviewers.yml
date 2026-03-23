@@ -12,6 +12,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
+      # Checkout is required so github-script can load ./.github/scripts/utils.js
       - name: Check out repository
         # Required so github-script can load .github/scripts/utils.js from the workspace.
         uses: actions/checkout@v4
