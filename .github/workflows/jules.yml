@@ -95,7 +95,6 @@ jobs:
               core.setOutput('pr_number', prNumber);
             } catch (error) {
               core.setFailed(`Failed to fetch PR diff: ${formatError(error)}`);
-              throw error;
             }
 
       - name: Review with Jules
