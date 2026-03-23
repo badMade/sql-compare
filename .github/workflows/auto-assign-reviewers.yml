@@ -15,8 +15,13 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const teamReviewers = ['team_reviewers'];
+            const teamReviewers = []; // Add team names here
             const prNumber = context.payload.pull_request.number;
+
+            if (teamReviewers.length === 0) {
+              console.log('No team reviewers specified, skipping.');
+              return;
+            }
 
             try {
               await github.rest.pulls.requestReviewers({
