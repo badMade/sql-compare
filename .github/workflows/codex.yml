@@ -96,6 +96,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PR_NUMBER: ${{ steps.diff.outputs.pr_number }}
+          PR_DIFF: ${{ steps.diff.outputs.diff }}
         with:
           script: |
             // Helper: Format error messages without exposing sensitive data
