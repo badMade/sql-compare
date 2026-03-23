@@ -52,6 +52,14 @@ async function testShouldTrigger() {
     ),
     false
   );
+  assert.strictEqual(
+    utils.shouldTrigger(
+      { eventName: 'issue_comment', payload: { comment: { body: 'This is my@codex-clone' } } },
+      '@codex'
+    ),
+    false,
+    'Should not trigger on partial matches'
+  );
   assert.strictEqual(utils.shouldTrigger(null, '@codex'), false);
 }
 
