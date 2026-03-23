@@ -49,7 +49,13 @@ async function testFormatError() {
 
 async function testGetPrInfo() {
   console.log('Testing getPrInfo...');
+
+  // Mock that simulates single-page results via github.paginate
   const mockGithub = {
+    paginate: async (fn, params) => {
+      const result = await fn(params);
+      return result.data;
+    },
     rest: {
       pulls: {
         listFiles: async () => ({
@@ -64,10 +70,57 @@ async function testGetPrInfo() {
     repo: { owner: 'user', repo: 'repo' }
   };
 
-  const info = await utils.getPrInfo(mockGithub, mockContext, {});
+  const info = await utils.getPrInfo(mockGithub, mockContext);
   assert.strictEqual(info.prNumber, 123);
   assert.ok(info.diff.includes('--- test.py'));
   assert.ok(info.diff.includes('+new'));
+}
+
+async function testGetPrInfoPagination() {
+  console.log('Testing getPrInfo pagination (multiple pages)...');
+
+  // Simulate a PR with files across two pages
+  const page1Files = Array.from({ length: 100 }, (_, i) => ({
+    filename: `file_page1_${i}.py`,
+    patch: `@@ -1,1 +1,1 @@\n-old${i}\n+new${i}`
+  }));
+  const page2Files = [
+    { filename: 'file_page2_0.py', patch: '@@ -1,1 +1,1 @@\n-oldX\n+newX' }
+  ];
+  const allFiles = [...page1Files, ...page2Files];
+
+  let paginateCalled = false;
+  // github.paginate returns a flat array of all items across all pages
+  const mockGithub = {
+    paginate: async (fn, params) => {
+      paginateCalled = true;
+      // Invoke fn to verify the correct function is passed
+      assert.ok(typeof fn === 'function', 'paginate should receive a function');
+      assert.strictEqual(params.pull_number, 456);
+      return allFiles;
+    },
+    rest: {
+      pulls: {
+        // listFiles should not be called directly; throw if it is
+        listFiles: async () => {
+          throw new Error('listFiles called directly instead of via paginate');
+        }
+      }
+    }
+  };
+
+  const mockContext = {
+    payload: { pull_request: { number: 456 } },
+    repo: { owner: 'user', repo: 'repo' }
+  };
+
+  const info = await utils.getPrInfo(mockGithub, mockContext);
+  assert.ok(paginateCalled, 'github.paginate should have been called');
+  assert.strictEqual(info.prNumber, 456);
+  // All 101 files should be present in the diff
+  assert.strictEqual((info.diff.match(/^--- /mg) || []).length, 101);
+  assert.ok(info.diff.includes('--- file_page1_0.py'));
+  assert.ok(info.diff.includes('--- file_page2_0.py'));
 }
 
 async function testCallAiApi() {
@@ -108,6 +161,7 @@ async function runTests() {
   try {
     await testFormatError();
     await testGetPrInfo();
+    await testGetPrInfoPagination();
     await testCallAiApi();
     console.log('All utility tests passed!');
   } catch (e) {
