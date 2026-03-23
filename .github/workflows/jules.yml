@@ -160,5 +160,5 @@ jobs:
               // Ensure errors don't expose API keys or sensitive info
               const safeError = formatError(error);
               core.setFailed(`Review failed: ${safeError}`);
-              throw error;
+              return;
             }
