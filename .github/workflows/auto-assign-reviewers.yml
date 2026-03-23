@@ -9,9 +9,11 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pull-requests: write
     steps:
       - name: Check out repository
+        # Required so github-script can load .github/scripts/utils.js from the workspace.
         uses: actions/checkout@v4
 
       - name: Request reviewers
