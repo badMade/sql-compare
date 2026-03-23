@@ -20,7 +20,7 @@ async function getPrInfo(github, context, core) {
     return { prNumber: null, diff: '' };
   }
 
-  const { data: files } = await github.rest.pulls.listFiles({
+  const files = await github.paginate(github.rest.pulls.listFiles, {
     owner: context.repo.owner,
     repo: context.repo.repo,
     pull_number: prNumber,
