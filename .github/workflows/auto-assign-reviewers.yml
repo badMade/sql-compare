@@ -64,11 +64,12 @@ jobs:
               await github.rest.pulls.requestReviewers({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                pull_number: prNumber,
-                team_reviewers: validTeams,
+                pull_number: pullRequestNumber,
+                team_reviewers: collaboratorTeamSlugs,
               });
-              console.log('Requested reviews from teams: ' + validTeams.join(', '));
+              console.log(`Requested reviews from teams: ${collaboratorTeamSlugs.join(', ')}`);
             } catch (error) {
-              console.error('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
-              core.setFailed('Failed to assign reviewers: ' + (error && error.message ? error.message : String(error)));
+              const errorMessage = error && error.message ? error.message : 'Unknown error';
+              console.error(`Failed to assign reviewers: ${errorMessage}`);
+              core.setFailed(`Failed to assign reviewers: ${errorMessage}`);
             }
