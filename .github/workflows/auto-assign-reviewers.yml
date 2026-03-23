@@ -16,35 +16,47 @@ jobs:
         with:
           script: |
             const teamReviewers = ['team_reviewers'];
-            const prNumber = context.payload.pull_request.number;
+            const prNumber = context.payload.pull_request?.number;
 
-            // Filter to only teams that are collaborators on this repo
-            const validTeams = [];
-            for (const team of teamReviewers) {
-              try {
-                await github.rest.teams.getByName({
-                  org: context.repo.owner,
-                  team_slug: team,
-                });
-                // Check if the team has access to this repo
+            async function getValidTeams(github, context, requestedTeams) {
+              const validTeams = [];
+              const skippedTeams = [];
+
+              for (const team of requestedTeams) {
                 try {
+                  await github.rest.teams.getByName({
+                    org: context.repo.owner,
+                    team_slug: team,
+                  });
+
                   await github.rest.teams.checkPermissionsForRepoInOrg({
                     org: context.repo.owner,
                     team_slug: team,
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                   });
+
                   validTeams.push(team);
-                } catch (permError) {
-                  console.log(`Team '${team}' is not a collaborator on this repo, skipping.`);
+                } catch (error) {
+                  skippedTeams.push(team);
+                  console.log(`Skipping team review request due to validation failure: ${error.message}`);
                 }
-              } catch (teamError) {
-                console.log(`Team '${team}' not found in org, skipping.`);
               }
+
+              return { validTeams, skippedTeams };
             }
 
+            if (prNumber === undefined) {
+              const errorMessage = 'Pull request number not found in the event payload.';
+              console.error(errorMessage);
+              core.setFailed(errorMessage);
+              return;
+            }
+
+            const { validTeams, skippedTeams } = await getValidTeams(github, context, teamReviewers);
+
             if (validTeams.length === 0) {
-              console.log('No valid collaborator teams found to request reviews from. Skipping.');
+              console.log(`No valid collaborator teams found to request reviews from. Skipping. Invalid teams count: ${skippedTeams.length}.`);
               return;
             }
 
