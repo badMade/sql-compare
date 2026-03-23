@@ -45,7 +45,11 @@ function formatError(error, maxLength = 200) {
   if (error instanceof Error) {
     message = error.message;
   } else if (typeof error === 'object' && error !== null) {
-    message = error.message || JSON.stringify(error);
+    try {
+      message = error.message || JSON.stringify(error);
+    } catch {
+      message = String(error);
+    }
   } else {
     message = String(error);
   }
