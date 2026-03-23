@@ -26,28 +26,34 @@ function isExpectedInvalidReviewerError(error) {
 }
 
 async function findRequestableTeams(github, context, prNumber, configuredTeamReviewers, logger) {
-  const requestableTeams = [];
-  const skippedTeams = [];
-
-  for (const teamSlug of configuredTeamReviewers) {
-    try {
-      await requestReviewersForTeams(github, context, prNumber, [teamSlug]);
-      requestableTeams.push(teamSlug);
-    } catch (error) {
-      if (isExpectedInvalidReviewerError(error)) {
-        skippedTeams.push(teamSlug);
-        logger.info(`Skipping team reviewer '${teamSlug}' because GitHub rejected the review request.`);
-        continue;
-      }
-
-      logger.error(
-        `Unexpected error while validating team reviewer '${teamSlug}': ${normalizeErrorMessage(error)}`
-      );
-      throw error;
-    }
-  }
-
-  return { requestableTeams, skippedTeams };
+29:  const promises = configuredTeamReviewers.map(teamSlug =>
+30:    requestReviewersForTeams(github, context, prNumber, [teamSlug])
+31:  );
+32:
+33:  const results = await Promise.allSettled(promises);
+34:
+35:  const requestableTeams = [];
+36:  const skippedTeams = [];
+37:
+38:  results.forEach((result, index) => {
+39:    const teamSlug = configuredTeamReviewers[index];
+40:    if (result.status === 'fulfilled') {
+41:      requestableTeams.push(teamSlug);
+42:    } else { // 'rejected'
+43:      const error = result.reason;
+44:      if (isExpectedInvalidReviewerError(error)) {
+45:        skippedTeams.push(teamSlug);
+46:        logger.info(`Skipping team reviewer '${teamSlug}' because GitHub rejected the review request.`);
+47:      } else {
+48:        logger.error(
+49:          `Unexpected error while validating team reviewer '${teamSlug}': ${normalizeErrorMessage(error)}`
+50:        );
+51:        throw error;
+52:      }
+53:    }
+54:  });
+55:
+56:  return { requestableTeams, skippedTeams };
 }
 
 async function requestTeamReviews({ github, context, core, teamReviewers, logger = console }) {
