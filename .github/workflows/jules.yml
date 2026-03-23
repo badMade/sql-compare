@@ -85,7 +85,13 @@ jobs:
                 `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary)'}`
               ).join('\n\n');
 
-              core.setOutput('diff', diff);
+              // Truncate diff to stay within GitHub Actions step output size limits
+              const MAX_DIFF_OUTPUT_LENGTH = 900000;
+              const truncatedDiff = diff.length > MAX_DIFF_OUTPUT_LENGTH
+                ? diff.substring(0, MAX_DIFF_OUTPUT_LENGTH)
+                : diff;
+
+              core.setOutput('diff', truncatedDiff);
               core.setOutput('pr_number', prNumber);
             } catch (error) {
               core.setFailed(`Failed to fetch PR diff: ${formatError(error)}`);
