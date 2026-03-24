@@ -59,23 +59,19 @@ class TestWorkflowScripts(unittest.TestCase):
         parser = """
 const fs = require('fs');
 const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
-const script = fs.readFileSync(process.argv[1], 'utf8');
+// Read script from stdin, which is where Python's `input` argument sends it.
+const script = fs.readFileSync(0, 'utf8');
 new AsyncFunction('github', 'context', 'core', script);
 """
-        script_path = Path('tests/_workflow_script_tmp.js')
-        parser_path = Path('tests/_workflow_parser_tmp.js')
-        script_path.write_text(script, encoding='utf-8')
-        parser_path.write_text(parser, encoding='utf-8')
-        try:
-            completed = subprocess.run(
-                ['node', str(parser_path), str(script_path)],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-        finally:
-            script_path.unlink(missing_ok=True)
-            parser_path.unlink(missing_ok=True)
+        # Run node process, passing the parser via -e and the script via stdin.
+        # This avoids creating temporary files.
+        completed = subprocess.run(
+            ['node', '-e', parser],
+            input=script,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
         self.assertEqual(
             completed.returncode,
             0,
