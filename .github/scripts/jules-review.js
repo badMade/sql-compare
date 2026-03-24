@@ -7,7 +7,7 @@ module.exports = async ({ github, context, core }) => {
   const prNumber = Number(process.env.PR_NUMBER);
   const apiKey = process.env.GOOGLE_API_KEY;
 
-  if (!prNumber) {
+  if (!prNumber || prNumber < 1) {
     return fail(core, 'Invalid PR number provided.');
   }
   if (!apiKey) {
