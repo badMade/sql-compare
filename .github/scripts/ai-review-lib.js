@@ -76,8 +76,8 @@ async function safeFetch(url, options, logger = console) {
         // Sanitize error body to avoid secret exposure
         const sanitizedError = errorBody
           .replace(/key=[^&\s]+/g, 'key=[REDACTED]')
-          .replace(/Authorization: Bearer [^&\s]+/g, 'Authorization: Bearer [REDACTED]')
-          .replace(/x-goog-api-key: [^&\s]+/g, 'x-goog-api-key: [REDACTED]')
+          .replace(/Authorization: Bearer [^\s&]+/gi, 'Authorization: Bearer [REDACTED]')
+          .replace(/x-goog-api-key: [^\s&]+/gi, 'x-goog-api-key: [REDACTED]')
           .substring(0, 500);
 
         throw new Error(`HTTP ${response.status}: ${sanitizedError}`);
