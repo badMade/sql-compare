@@ -1,5 +1,7 @@
 import unittest
 import argparse
+import subprocess
+from pathlib import Path
 from unittest.mock import patch
 from sql_compare import (
     canonicalize_joins, clause_end_index, tokenize,
@@ -8,6 +10,47 @@ from sql_compare import (
     _tokenize_from_clause_body, split_top_level,
 )
 
+
+
+class TestWorkflowScripts(unittest.TestCase):
+    def test_cleanup_workflow_uses_current_github_script(self):
+        """The cleanup workflow should use the Node 24-compatible github-script action."""
+        workflow = Path('.github/workflows/cleanup-redundant-prs.yml').read_text(encoding='utf-8')
+        self.assertIn('uses: actions/github-script@v8', workflow)
+
+    def test_cleanup_workflow_embedded_script_parses(self):
+        """The embedded github-script JavaScript should parse without syntax errors."""
+        workflow = Path('.github/workflows/cleanup-redundant-prs.yml').read_text(encoding='utf-8')
+        script = workflow.split('script: |\n', 1)[1]
+        script = '\n'.join(
+            line[12:] if line.startswith(' ' * 12) else line
+            for line in script.splitlines()
+        )
+        parser = """
+const fs = require('fs');
+const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+const script = fs.readFileSync(process.argv[1], 'utf8');
+new AsyncFunction('github', 'context', 'core', script);
+"""
+        script_path = Path('tests/_workflow_script_tmp.js')
+        parser_path = Path('tests/_workflow_parser_tmp.js')
+        script_path.write_text(script, encoding='utf-8')
+        parser_path.write_text(parser, encoding='utf-8')
+        try:
+            completed = subprocess.run(
+                ['node', str(parser_path), str(script_path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        finally:
+            script_path.unlink(missing_ok=True)
+            parser_path.unlink(missing_ok=True)
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg=completed.stderr or completed.stdout,
+        )
 
 
 class TestCollapseWhitespace(unittest.TestCase):
