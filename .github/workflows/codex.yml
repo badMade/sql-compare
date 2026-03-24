@@ -15,7 +15,11 @@ jobs:
       (
         github.event_name == 'pull_request' &&
         github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review')
+        (
+          contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review') ||
+          contains(github.event.pull_request.body, '@codex') ||
+          contains(github.event.pull_request.title, '@codex')
+        )
       ) || (
         github.event_name == 'issue_comment' &&
         contains(github.event.comment.body, '@codex') &&
@@ -24,10 +28,16 @@ jobs:
           github.event.comment.author_association == 'OWNER' ||
           github.event.comment.author_association == 'COLLABORATOR'
         ) &&
-        github.event.issue.pull_request &&
-        contains(github.event.issue.labels.*.name, 'safe-for-ai-review')
+        github.event.issue.pull_request
       ) || (
-        github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@codex') && github.event.pull_request.head.repo.full_name == github.repository
+        github.event_name == 'pull_request_review_comment' &&
+        contains(github.event.comment.body, '@codex') &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        (
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'COLLABORATOR'
+        )
       )
     runs-on: ubuntu-latest
     permissions:
@@ -46,15 +56,19 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+            const fail = (message, error) => {
+              if (error) core.error(`${message}: ${error.message}`);
+              else core.error(message);
+              core.setFailed(message);
+            };
+
             try {
               // 1. Validate GitHub context and determine PR number
               const prNumber = context.payload.pull_request?.number ||
                 context.payload.issue?.number;
 
               if (!prNumber) {
-                console.error('Could not determine PR number from context.');
-                core.setFailed('Could not determine PR number');
-                return;
+                return fail('Could not determine PR number');
               }
 
               // Skip if comment is on a regular issue (not a PR)
@@ -63,10 +77,17 @@ jobs:
                 return;
               }
 
-              // 2. Fetch all changed files with pagination
+              // 2. Fetch PR metadata (title, body)
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
+
+              // 3. Fetch changed files with pagination (max 10 pages)
               let files = [];
               let page = 1;
-              while (true) {
+              while (page <= 10) {
                 const { data: pageFiles } = await github.rest.pulls.listFiles({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -79,19 +100,25 @@ jobs:
                 page++;
               }
 
-              // 3. Construct the diff string
+              if (files.length === 0) {
+                console.log('No files changed in this PR.');
+                return;
+              }
+
+              // 4. Construct the diff string
               const diff = files.map(f =>
                 `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary)'}`
               ).join('\n\n');
 
-              // 4. Save diff to file to avoid environment variable size limits
+              // 5. Save diff to file and set outputs
               fs.writeFileSync('pr_diff.txt', diff);
               core.setOutput('pr_number', prNumber);
+              core.setOutput('pr_title', pr.title);
+              core.setOutput('pr_body', pr.body);
 
               console.log(`Successfully fetched diff for PR #${prNumber} (${files.length} files).`);
             } catch (error) {
-              console.error('Error fetching PR diff:', error);
-              core.setFailed(`Failed to get PR diff: ${error.message}`);
+              fail('Failed to get PR diff', error);
             }
 
       - name: Review with Codex
@@ -104,11 +131,16 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+            const fail = (message, error) => {
+              if (error) core.error(`${message}: ${error.message}`);
+              else core.error(message);
+              core.setFailed(message);
+            };
+
             try {
               const prNumber = Number(process.env.PR_NUMBER);
               if (!prNumber) {
-                console.error('Invalid PR number received from previous step.');
-                core.setFailed('Invalid PR number');
+                console.log('No PR number provided. Possibly skipped file fetch.');
                 return;
               }
 
@@ -117,16 +149,12 @@ jobs:
               try {
                 diff = fs.readFileSync('pr_diff.txt', 'utf8');
               } catch (readError) {
-                console.error('Error reading pr_diff.txt:', readError);
-                core.setFailed('Could not read PR diff file');
-                return;
+                return fail('Could not read PR diff file', readError);
               }
 
               // 2. Validate API key presence
               if (!process.env.OPENAI_API_KEY) {
-                console.error('OPENAI_API_KEY is missing.');
-                core.setFailed('OPENAI_API_KEY is not set');
-                return;
+                return fail('OPENAI_API_KEY is missing');
               }
 
               console.log(`Sending PR #${prNumber} diff to OpenAI for review...`);
@@ -143,13 +171,13 @@ jobs:
                   messages: [
                     {
                       role: 'system',
-                      content: 'You are a code reviewer. Review the following PR diff. ' +
+                      content: 'You are a code reviewer. Review the following PR. ' +
                                'Identify bugs, security issues, style problems, and suggest improvements. ' +
                                'Be concise and actionable.'
                     },
                     {
                       role: 'user',
-                      content: `Please review this pull request diff:\n\n${diff}`
+                      content: `Title: ${process.env.PR_TITLE}\nBody: ${process.env.PR_BODY}\n\nDiff:\n${diff}`
                     }
                   ],
                   max_tokens: 4096,
@@ -175,7 +203,5 @@ jobs:
 
               console.log(`Successfully posted Codex review for PR #${prNumber}.`);
             } catch (error) {
-              // Standardized error handling: log then fail
-              console.error('Error during Codex review:', error);
-              core.setFailed(`Review process failed: ${error.message}`);
+              fail('Review process failed', error);
             }
