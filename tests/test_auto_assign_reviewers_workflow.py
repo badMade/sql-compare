@@ -14,7 +14,7 @@ class AutoAssignReviewersWorkflowTests(unittest.TestCase):
             self.assertIn('pull-requests: write', workflow)
 
         with self.subTest(msg="Checkout step is present and correctly ordered"):
-            checkout_ref = 'uses: actions/checkout@v4.0.4'
+            checkout_ref = 'uses: actions/checkout@v4'
             require_call = "require('./.github/scripts/utils.js')"
             self.assertIn(checkout_ref, workflow)
             self.assertIn(require_call, workflow)
