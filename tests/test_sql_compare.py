@@ -22,9 +22,15 @@ class TestWorkflowScripts(unittest.TestCase):
         """The embedded github-script JavaScript should parse without syntax errors."""
         workflow = Path('.github/workflows/cleanup-redundant-prs.yml').read_text(encoding='utf-8')
         script = workflow.split('script: |\n', 1)[1]
+        script_lines = script.splitlines()
+        indent = 0
+        for line in script_lines:
+            if line.strip():
+                indent = len(line) - len(line.lstrip(' '))
+                break
         script = '\n'.join(
-            line[12:] if line.startswith(' ' * 12) else line
-            for line in script.splitlines()
+            line[indent:] if indent and line.startswith(' ' * indent) else line
+            for line in script_lines
         )
         parser = """
 const fs = require('fs');
