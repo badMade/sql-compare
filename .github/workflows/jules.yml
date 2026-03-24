@@ -48,37 +48,64 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+
+            // Helper function: Format error message safely
+            const formatError = (error) => {
+              return error && error.message ? error.message : String(error);
+            };
+
+            // Helper function: Validate and parse PR number
+            const validatePrNumber = (number) => {
+              const parsed = parseInt(number, 10);
+              return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+            };
+
             try {
               // 1. Determine PR number from context
-              const prNumber = context.payload.pull_request?.number ||
+              const rawPrNumber = context.payload.pull_request?.number ||
                 context.payload.issue?.number;
 
+              const prNumber = validatePrNumber(rawPrNumber);
               if (!prNumber) {
-                console.error('Could not determine PR number from context.');
+                core.error('Could not determine valid PR number from context.');
                 core.setFailed('Could not determine PR number');
                 return;
               }
 
               // Skip if comment is on a regular issue
               if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
-                console.log('Comment on a regular issue, skipping.');
+                core.info('Comment on a regular issue, skipping.');
                 return;
               }
 
-              // 2. Fetch files with pagination
+              // 2. Fetch files with pagination (max 10 pages = 1000 files)
+              const MAX_PAGES = 10;
               let files = [];
               let page = 1;
-              while (true) {
-                const { data: pageFiles } = await github.rest.pulls.listFiles({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: prNumber,
-                  per_page: 100,
-                  page: page,
-                });
-                files = files.concat(pageFiles);
-                if (pageFiles.length < 100) break;
-                page++;
+
+              while (page <= MAX_PAGES) {
+                try {
+                  const { data: pageFiles } = await github.rest.pulls.listFiles({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: prNumber,
+                    per_page: 100,
+                    page: page,
+                  });
+                  files = files.concat(pageFiles);
+
+                  // Break if fewer files than per_page (last page)
+                  if (pageFiles.length < 100) break;
+                  page++;
+                } catch (pageError) {
+                  core.error(`Error fetching page ${page}: ${formatError(pageError)}`);
+                  core.setFailed(`Failed to fetch files at page ${page}`);
+                  return;
+                }
+              }
+
+              if (page > MAX_PAGES) {
+                core.warning(`PR has more than ${MAX_PAGES * 100} files. Only processing first ${files.length} files.`);
               }
 
               // 3. Construct diff
@@ -90,10 +117,10 @@ jobs:
               fs.writeFileSync('pr_diff.txt', diff);
               core.setOutput('pr_number', prNumber);
 
-              console.log(`Fetched diff for PR #${prNumber} (${files.length} files).`);
+              core.info(`Fetched diff for PR #${prNumber} (${files.length} files).`);
             } catch (error) {
-              console.error('Error fetching PR diff:', error);
-              core.setFailed(`Failed to get PR diff: ${error.message}`);
+              core.error(`Error fetching PR diff: ${formatError(error)}`);
+              core.setFailed(`Failed to get PR diff: ${formatError(error)}`);
             }
 
       - name: Review with Jules (Gemini)
@@ -104,10 +131,44 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+
+            // Helper function: Format error message safely (truncate to 500 chars)
+            const formatError = (error) => {
+              const msg = error && error.message ? error.message : String(error);
+              return msg.length > 500 ? msg.substring(0, 500) + '... (truncated)' : msg;
+            };
+
+            // Helper function: Retry with exponential backoff
+            const fetchWithRetry = async (url, options, maxRetries = 3) => {
+              for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                  const response = await fetch(url, options);
+                  return response;
+                } catch (error) {
+                  if (attempt === maxRetries) throw error;
+                  const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+                  core.warning(`Attempt ${attempt} failed, retrying in ${delay}ms...`);
+                  await new Promise(resolve => setTimeout(resolve, delay));
+                }
+              }
+            };
+
+            // Helper function: Validate content type before parsing
+            const parseJsonResponse = async (response) => {
+              const contentType = response.headers.get('content-type');
+              if (contentType && contentType.includes('application/json')) {
+                return await response.json();
+              } else {
+                // For non-JSON responses, return text
+                const text = await response.text();
+                throw new Error(`Expected JSON response but got ${contentType || 'unknown type'}: ${text.substring(0, 200)}`);
+              }
+            };
+
             try {
               const prNumber = Number(process.env.PR_NUMBER);
-              if (!prNumber) {
-                console.error('Invalid PR number.');
+              if (!prNumber || !Number.isInteger(prNumber)) {
+                core.error('Invalid PR number.');
                 core.setFailed('Invalid PR number');
                 return;
               }
@@ -117,22 +178,22 @@ jobs:
               try {
                 diff = fs.readFileSync('pr_diff.txt', 'utf8');
               } catch (readError) {
-                console.error('Error reading pr_diff.txt:', readError);
+                core.error(`Error reading pr_diff.txt: ${formatError(readError)}`);
                 core.setFailed('Could not read PR diff file');
                 return;
               }
 
-              // 2. Validate API key
-              if (!process.env.GOOGLE_API_KEY) {
-                console.error('GOOGLE_API_KEY is missing.');
+              // 2. Validate API key (without logging the key itself)
+              if (!process.env.GOOGLE_API_KEY || process.env.GOOGLE_API_KEY.length < 10) {
+                core.error('GOOGLE_API_KEY is missing or invalid.');
                 core.setFailed('GOOGLE_API_KEY is not set');
                 return;
               }
 
-              console.log(`Sending PR #${prNumber} diff to Gemini for review...`);
+              core.info(`Sending PR #${prNumber} diff to Gemini for review...`);
 
-              // 3. Call Gemini API
-              const response = await fetch(
+              // 3. Call Gemini API with retry logic
+              const response = await fetchWithRetry(
                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${process.env.GOOGLE_API_KEY}`,
                 {
                   method: 'POST',
@@ -154,10 +215,13 @@ jobs:
 
               if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`Gemini API responded with ${response.status}: ${errorText}`);
+                // Log only status code and truncated error to avoid exposing sensitive info
+                core.error(`Gemini API error: Status ${response.status}`);
+                throw new Error(`Gemini API responded with ${response.status}: ${errorText.substring(0, 500)}`);
               }
 
-              const result = await response.json();
+              // Parse JSON response with content-type validation
+              const result = await parseJsonResponse(response);
               const review = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate review.';
 
               // 4. Create pull request review
@@ -169,8 +233,9 @@ jobs:
                 body: `## Jules Review\n\n${review}`,
               });
 
-              console.log(`Successfully posted Jules review for PR #${prNumber}.`);
+              core.info(`Successfully posted Jules review for PR #${prNumber}.`);
             } catch (error) {
-              console.error('Error during Jules review:', error);
-              core.setFailed(`Review process failed: ${error.message}`);
+              // Standardized error handling: log truncated error then fail
+              core.error(`Error during Jules review: ${formatError(error)}`);
+              core.setFailed(`Review process failed: ${formatError(error)}`);
             }
