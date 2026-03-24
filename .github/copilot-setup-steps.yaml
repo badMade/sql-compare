@@ -1,0 +1,8 @@
+env:
+  COPILOT_USE_SESSIONS: "false"
+  COPILOT_MEMORY_ENABLED: "false"
+  DISABLE_MEMORY: "true"
+  SKIP_MEMORY_FETCH: "true"
+steps:
+  - name: Prepare environment for Copilot agents
+    run: "echo 'Copilot setup applied: memory fetch disabled.'"
