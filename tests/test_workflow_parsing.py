@@ -4,7 +4,7 @@ import tempfile
 import os
 from pathlib import Path
 
-def extract_workflow_script(workflow_content, step_name):
+def extract_workflow_script(workflow_content: Optional[str], step_name: str) -> Optional[str]:
     """
     Securely parses workflow YAML content and extracts the 'script' property
     from a step matching step_name.
