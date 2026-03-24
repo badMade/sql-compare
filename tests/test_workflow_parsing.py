@@ -15,18 +15,7 @@ def extract_workflow_script(workflow_content: Optional[str], step_name: str) -> 
     except (yaml.YAMLError, TypeError, AttributeError):
         return None
 
-    if not data or not isinstance(data, dict) or 'jobs' not in data:
-        return None
-
-    for job_id, job in data['jobs'].items():
-        if not isinstance(job, dict) or 'steps' not in job:
-            continue
-        for step in job['steps']:
-            if not isinstance(step, dict):
-                continue
-            if step.get('name') == step_name:
-                return step.get('with', {}).get('script')
-    return None
+    if not data or not isinstance(data, dict) or not isinstance(data.get('jobs'), dict):
 
 class TestWorkflowParsing(unittest.TestCase):
     def test_cleanup_workflow_embedded_script_parses(self):
