@@ -9,6 +9,7 @@ const {
   parsePrNumber,
   safeErrorMessage,
   safeReadBody,
+  sanitizeSecrets,
 } = require('./review-utils');
 
 let passed = 0;
@@ -48,6 +49,21 @@ assertThrows(() => normalizePrNumber(undefined), 'normalizePrNumber undefined');
 assertThrows(() => normalizePrNumber('abc'), 'normalizePrNumber non-numeric');
 assertThrows(() => normalizePrNumber(NaN), 'normalizePrNumber NaN');
 assertThrows(() => normalizePrNumber(Infinity), 'normalizePrNumber Infinity');
+
+// --- sanitizeSecrets ---
+assert(
+  sanitizeSecrets('key=abc123&foo=bar') === 'key=[REDACTED]&foo=bar',
+  'sanitizeSecrets redacts key param'
+);
+assert(
+  sanitizeSecrets('Authorization: Bearer sk-secret123') === 'Authorization: Bearer [REDACTED]',
+  'sanitizeSecrets redacts bearer token'
+);
+assert(
+  sanitizeSecrets('x-goog-api-key: AIza123') === 'x-goog-api-key: [REDACTED]',
+  'sanitizeSecrets redacts goog api key'
+);
+assert(sanitizeSecrets('no secrets here') === 'no secrets here', 'sanitizeSecrets no-op on clean text');
 
 // --- buildDiffString ---
 assert(

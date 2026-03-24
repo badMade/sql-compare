@@ -107,11 +107,24 @@ function isJsonResponse(response) {
 }
 
 /**
+ * Redact potential secrets (API keys, bearer tokens) from error text
+ * to prevent accidental exposure in workflow logs.
+ */
+function sanitizeSecrets(text) {
+  return text
+    .replace(/key=[^&\s]+/g, 'key=[REDACTED]')
+    .replace(/Authorization:\s*Bearer\s+[^\s&]+/gi, 'Authorization: Bearer [REDACTED]')
+    .replace(/x-goog-api-key:\s*[^\s&]+/gi, 'x-goog-api-key: [REDACTED]');
+}
+
+/**
  * Safely read the body text of a fetch Response, returning a fallback on failure.
+ * Automatically sanitizes secrets from the response text.
  */
 async function safeReadBody(response) {
   try {
-    return await response.text();
+    const text = await response.text();
+    return sanitizeSecrets(text);
   } catch {
     return '(unable to read response body)';
   }
@@ -134,4 +147,5 @@ module.exports = {
   parsePrNumber,
   safeErrorMessage,
   safeReadBody,
+  sanitizeSecrets,
 };
