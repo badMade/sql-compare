@@ -1,5 +1,6 @@
 name: copilot-setup-steps
-on:
+
+"on":
   workflow_call:
 jobs:
   copilot-setup-steps:
