@@ -698,7 +698,10 @@ class TestSecurity(unittest.TestCase):
             self.assertNotIn('<script>', html_content)
             self.assertIn('&lt;script&gt;', html_content)
         finally:
-            os.unlink(tmp_path)
+            try:
+                os.unlink(tmp_path)
+            except FileNotFoundError:
+                pass
 
 
 
