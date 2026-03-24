@@ -32,7 +32,10 @@ jobs:
               });
               console.log(`Requested reviews from teams: ${collaboratorTeamSlugs.join(', ')}`);
             } catch (error) {
-              const errorMessage = error && error.message ? error.message : 'Unknown error';
-              console.error(`Failed to assign reviewers: ${errorMessage}`);
-              core.setFailed(`Failed to assign reviewers: ${errorMessage}`);
+              const errorMessage = error?.message || String(error);
+
+              // Log the low-level error for workflow debugging, then mark the
+              // action as failed with a concise message for the job summary.
+              console.error('Reviewer assignment request failed:', errorMessage);
+              core.setFailed('Failed to assign reviewers.');
             }
