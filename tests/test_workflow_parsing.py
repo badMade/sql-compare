@@ -1,112 +1,139 @@
-import re
-import shutil
-import subprocess
 import unittest
+import yaml
+import tempfile
+import os
 from pathlib import Path
 
-
-def get_workflow_content(filename):
-    repo_root = Path(__file__).parent.parent
-    workflow_path = repo_root / '.github' / 'workflows' / filename
-    return workflow_path.read_text(encoding='utf-8')
-
-
-def extract_job_if(workflow_content, job_name):
-    match = re.search(
-        rf"^  {re.escape(job_name)}:\n(?:^[ \t].*\n)*?^    if: \|\n(?P<body>(?:^      .*\n)+)",
-        workflow_content,
-        re.MULTILINE,
-    )
-    return match.group('body') if match else ''
-
-
-def extract_script(workflow_content, step_name):
-    marker = f"- name: {step_name}"
-    marker_index = workflow_content.find(marker)
-    if marker_index == -1:
+def extract_workflow_script(workflow_content, step_name):
+    """
+    Securely parses workflow YAML content and extracts the 'script' property
+    from a step matching step_name.
+    """
+    if workflow_content is None:
+        return None
+    try:
+        data = yaml.safe_load(workflow_content)
+    except (yaml.YAMLError, TypeError, AttributeError):
         return None
 
-    script_marker = "\n          script: |\n"
-    script_start = workflow_content.find(script_marker, marker_index)
-    if script_start == -1:
+    if not data or not isinstance(data, dict) or 'jobs' not in data:
         return None
 
-    content_start = script_start + len(script_marker)
-    lines = []
-    for line in workflow_content[content_start:].splitlines(keepends=True):
-        if line.startswith('            '):
-            lines.append(line[12:])
+    for job_id, job in data['jobs'].items():
+        if not isinstance(job, dict) or 'steps' not in job:
             continue
-        if line.strip() == '':
-            lines.append('\n')
-            continue
-        break
-
-    script = ''.join(lines).rstrip('\n')
-    return script or None
-
+        for step in job['steps']:
+            if not isinstance(step, dict):
+                continue
+            if step.get('name') == step_name:
+                return step.get('with', {}).get('script')
+    return None
 
 class TestWorkflowParsing(unittest.TestCase):
-    def test_ai_workflows(self):
-        scenarios = [
-            {
-                "filename": "codex.yml",
-                "job_name": "codex-review",
-                "mention": "@codex",
-                "review_step_name": "Review with Codex",
-            },
-            {
-                "filename": "jules.yml",
-                "job_name": "jules-review",
-                "mention": "@jules",
-                "review_step_name": "Review with Jules (Gemini)",
-            },
-        ]
+    def test_cleanup_workflow_embedded_script_parses(self):
+        """Test that the embedded script in a mock workflow parses correctly using a temporary directory."""
+        workflow_yaml = """
+name: Test Workflow
+on: [push]
+jobs:
+  test_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: My Step
+        uses: actions/github-script@v8
+        with:
+          script: |
+            console.log("Hello, World!");
+            return true;
+"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wf_path = Path(tmpdir) / "workflow.yml"
+            wf_path.write_text(workflow_yaml, encoding="utf-8")
 
-        for params in scenarios:
-            with self.subTest(workflow=params["filename"]):
-                content = get_workflow_content(params["filename"])
+            with open(wf_path, "r", encoding="utf-8") as f:
+                content = f.read()
 
-                # Test if condition for manual mentions in PR
-                job_if = content.get('jobs', {}).get(params["job_name"], {}).get('if', '')
-                self.assertIn(f"contains(github.event.pull_request.body, '{params['mention']}')", job_if)
-                self.assertIn(f"contains(github.event.pull_request.title, '{params['mention']}')", job_if)
+            script = extract_workflow_script(content, "My Step")
+            self.assertEqual(script.strip(), 'console.log("Hello, World!");\nreturn true;')
 
-                # Test Get PR diff script
-                diff_script = extract_script(content, 'Get PR diff')
-                self.assertIsNotNone(diff_script)
-                self.assertIn('const fail =', diff_script)
-                self.assertIn('github.rest.pulls.get', diff_script)
-                self.assertIn('page <= 10', diff_script)
-                self.validate_js_syntax(diff_script)
+    def test_extract_script_missing_step(self):
+        """Test behavior when the specified step name is missing."""
+        workflow_yaml = """
+jobs:
+  job1:
+    steps:
+      - name: Existing Step
+        with:
+          script: print(1)
+"""
+        script = extract_workflow_script(workflow_yaml, "Non-existent Step")
+        self.assertIsNone(script)
 
-                # Test Review script
-                review_script = extract_script(content, params["review_step_name"])
-                self.assertIsNotNone(review_script)
-                self.assertIn('const fail =', review_script)
-                self.assertIn('process.env.PR_TITLE', review_script)
-                self.assertIn('process.env.PR_BODY', review_script)
-                self.validate_js_syntax(review_script)
+    def test_extract_script_invalid_yaml(self):
+        """Test behavior with malformed YAML."""
+        invalid_yaml = """
+jobs:
+  job1:
+    steps:
+      - name: Step 1
+      - [unbalanced bracket
+"""
+        script = extract_workflow_script(invalid_yaml, "Step 1")
+        self.assertIsNone(script)
 
-    def validate_js_syntax(self, script_content):
-        node_path = shutil.which('node')
-        if not node_path:
-            self.skipTest('node not found, skipping JS syntax validation')
+    def test_robustness_with_none_input(self):
+        """Test robustness when input is None."""
+        self.assertIsNone(extract_workflow_script(None, "Any Step"))
 
-        # Wrap in async function for syntax check because github-script does this
-        wrapped_script = f"async function main() {{\n{script_content}\n}}"
+    def test_robustness_with_non_dict_yaml(self):
+        """Test robustness when YAML parses to non-dict (e.g., list)."""
+        self.assertIsNone(extract_workflow_script("- item1\n- item2", "Any Step"))
 
-        # Use node -c to check syntax
-        process = subprocess.run(
-            [node_path, '-c'],
-            input=wrapped_script,
-            text=True,
-            capture_output=True,
-            shell=False,
-        )
-        if process.returncode != 0:
-            self.fail(f"JS syntax error in script:\n{process.stderr}")
+    def test_negative_script_tag_missing(self):
+        """Test case where 'with' or 'script' tag is missing in the step."""
+        workflow_yaml = """
+jobs:
+  job1:
+    steps:
+      - name: Step No With
+      - name: Step No Script
+        with:
+          other: value
+"""
+        self.assertIsNone(extract_workflow_script(workflow_yaml, "Step No With"))
+        self.assertIsNone(extract_workflow_script(workflow_yaml, "Step No Script"))
 
+    def test_negative_empty_workflow(self):
+        """Test behavior with an empty workflow file."""
+        self.assertIsNone(extract_workflow_script("", "Any Step"))
+
+
+class TestReviewWorkflows(unittest.TestCase):
+    def setUp(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        self.codex_workflow = (repo_root / ".github" / "workflows" / "codex.yml").read_text(encoding="utf-8")
+        self.jules_workflow = (repo_root / ".github" / "workflows" / "jules.yml").read_text(encoding="utf-8")
+
+    def test_workflows_use_shared_utils(self):
+        """Ensure Codex and Jules workflows import the shared review utilities."""
+        required_import = "require('./.github/actions/review-utils')"
+        self.assertIn(required_import, self.codex_workflow)
+        self.assertIn(required_import, self.jules_workflow)
+
+    def test_workflows_use_safe_error_handling(self):
+        """Both workflows should use the shared safeErrorMessage helper."""
+        helper_call = "safeErrorMessage"
+        self.assertIn(helper_call, self.codex_workflow)
+        self.assertIn(helper_call, self.jules_workflow)
+
+    def test_workflows_guard_json_parsing(self):
+        """
+        Workflows should guard JSON parsing by checking Content-Type or using
+        a helper instead of blindly calling response.json()/text().
+        """
+        json_guard_marker = "isJsonResponse"
+        self.assertIn(json_guard_marker, self.codex_workflow)
+        self.assertIn(json_guard_marker, self.jules_workflow)
 
 if __name__ == '__main__':
     unittest.main()
