@@ -27,7 +27,13 @@ jobs:
         github.event.issue.pull_request &&
         contains(github.event.issue.labels.*.name, 'safe-for-ai-review')
       ) || (
-        github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@codex') && github.event.pull_request.head.repo.full_name == github.repository
+        github.event_name == 'pull_request_review_comment' &&
+        contains(github.event.comment.body, '@codex') &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review') &&
+        (github.event.comment.author_association == 'MEMBER' ||
+         github.event.comment.author_association == 'OWNER' ||
+         github.event.comment.author_association == 'COLLABORATOR')
       )
     runs-on: ubuntu-latest
     permissions:
