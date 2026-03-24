@@ -46,79 +46,31 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-
-            // Helper function: Format error message safely
-            const formatError = (error) => {
-              return error && error.message ? error.message : String(error);
-            };
-
-            // Helper function: Validate and parse PR number
-            const validatePrNumber = (number) => {
-              const parsed = parseInt(number, 10);
-              return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-            };
+            const {
+              buildDiffString,
+              fetchPrFilesWithPagination,
+              parsePrNumber,
+              safeErrorMessage,
+            } = require('./.github/actions/review-utils');
 
             try {
-              // 1. Validate GitHub context and determine PR number
-              const rawPrNumber = context.payload.pull_request?.number ||
-                context.payload.issue?.number;
-
-              const prNumber = validatePrNumber(rawPrNumber);
-              if (!prNumber) {
-                core.error('Could not determine valid PR number from context.');
-                core.setFailed('Could not determine PR number');
+              if (context.eventName === 'issue_comment' && !context.payload.issue?.pull_request) {
+                core.info('Comment on a regular issue; skipping Codex review.');
                 return;
               }
 
-              // Skip if comment is on a regular issue (not a PR)
-              if (context.eventName === 'issue_comment' && !context.payload.issue.pull_request) {
-                core.info('Comment on a regular issue, skipping.');
-                return;
-              }
+              const prNumber = parsePrNumber(context.payload);
+              const files = await fetchPrFilesWithPagination(github, context, prNumber, core);
+              const diff = buildDiffString(files);
 
-              // 2. Fetch all changed files with pagination (max 10 pages = 1000 files)
-              const MAX_PAGES = 10;
-              let files = [];
-              let page = 1;
-
-              while (page <= MAX_PAGES) {
-                try {
-                  const { data: pageFiles } = await github.rest.pulls.listFiles({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    pull_number: prNumber,
-                    per_page: 100,
-                    page: page,
-                  });
-                  files = files.concat(pageFiles);
-
-                  // Break if fewer files than per_page (last page)
-                  if (pageFiles.length < 100) break;
-                  page++;
-                } catch (pageError) {
-                  core.error(`Error fetching page ${page}: ${formatError(pageError)}`);
-                  core.setFailed(`Failed to fetch files at page ${page}`);
-                  return;
-                }
-              }
-
-              if (page > MAX_PAGES) {
-                core.warning(`PR has more than ${MAX_PAGES * 100} files. Only processing first ${files.length} files.`);
-              }
-
-              // 3. Construct the diff string
-              const diff = files.map(f =>
-                `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary)'}`
-              ).join('\n\n');
-
-              // 4. Save diff to file to avoid environment variable size limits
               fs.writeFileSync('pr_diff.txt', diff);
               core.setOutput('pr_number', prNumber);
 
-              core.info(`Successfully fetched diff for PR #${prNumber} (${files.length} files).`);
+              core.info(`Fetched diff for PR #${prNumber} (${files.length} files).`);
             } catch (error) {
-              core.error(`Error fetching PR diff: ${formatError(error)}`);
-              core.setFailed(`Failed to get PR diff: ${formatError(error)}`);
+              const message = safeErrorMessage(error);
+              core.error(`Error fetching PR diff: ${message}`);
+              core.setFailed(`Failed to get PR diff: ${message}`);
             }
 
       - name: Review with Codex
@@ -131,104 +83,76 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-
-            // Helper function: Format error message safely (truncate to 500 chars)
-            const formatError = (error) => {
-              const msg = error && error.message ? error.message : String(error);
-              return msg.length > 500 ? msg.substring(0, 500) + '... (truncated)' : msg;
-            };
-
-            // Helper function: Retry with exponential backoff
-            const fetchWithRetry = async (url, options, maxRetries = 3) => {
-              for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                try {
-                  const response = await fetch(url, options);
-                  return response;
-                } catch (error) {
-                  if (attempt === maxRetries) throw error;
-                  const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-                  core.warning(`Attempt ${attempt} failed, retrying in ${delay}ms...`);
-                  await new Promise(resolve => setTimeout(resolve, delay));
-                }
-              }
-            };
-
-            // Helper function: Validate content type before parsing
-            const parseJsonResponse = async (response) => {
-              const contentType = response.headers.get('content-type');
-              if (contentType && contentType.includes('application/json')) {
-                return await response.json();
-              } else {
-                // For non-JSON responses, return text
-                const text = await response.text();
-                throw new Error(`Expected JSON response but got ${contentType || 'unknown type'}: ${text.substring(0, 200)}`);
-              }
-            };
+            const {
+              fetchWithRetry,
+              isJsonResponse,
+              normalizePrNumber,
+              safeErrorMessage,
+              safeReadBody,
+            } = require('./.github/actions/review-utils');
 
             try {
-              const prNumber = Number(process.env.PR_NUMBER);
-              if (!prNumber || !Number.isInteger(prNumber)) {
-                core.error('Invalid PR number received from previous step.');
-                core.setFailed('Invalid PR number');
-                return;
-              }
+              const prNumber = normalizePrNumber(process.env.PR_NUMBER);
 
-              // 1. Read diff from file with error handling
-              let diff = '';
+              let diff;
               try {
                 diff = fs.readFileSync('pr_diff.txt', 'utf8');
               } catch (readError) {
-                core.error(`Error reading pr_diff.txt: ${formatError(readError)}`);
-                core.setFailed('Could not read PR diff file');
+                const message = safeErrorMessage(readError);
+                core.setFailed(`Could not read PR diff file: ${message}`);
                 return;
               }
 
-              // 2. Validate API key presence (without logging the key itself)
-              if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.length < 10) {
-                core.error('OPENAI_API_KEY is missing or invalid.');
+              if (!process.env.OPENAI_API_KEY) {
                 core.setFailed('OPENAI_API_KEY is not set');
                 return;
               }
 
               core.info(`Sending PR #${prNumber} diff to OpenAI for review...`);
 
-              // 3. Call OpenAI API with retry logic
-              const response = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  model: 'gpt-4o',
-                  messages: [
-                    {
-                      role: 'system',
-                      content: 'You are a code reviewer. Review the following PR diff. ' +
-                               'Identify bugs, security issues, style problems, and suggest improvements. ' +
-                               'Be concise and actionable.'
+              const response = await fetchWithRetry(
+                () =>
+                  fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                      'Content-Type': 'application/json',
                     },
-                    {
-                      role: 'user',
-                      content: `Please review this pull request diff:\n\n${diff}`
-                    }
-                  ],
-                  max_tokens: 4096,
-                }),
-              });
+                    body: JSON.stringify({
+                      model: 'gpt-4o',
+                      messages: [
+                        {
+                          role: 'system',
+                          content:
+                            'You are a code reviewer. Review the following PR diff. ' +
+                            'Identify bugs, security issues, style problems, and suggest improvements. ' +
+                            'Be concise and actionable.',
+                        },
+                        {
+                          role: 'user',
+                          content: `Please review this pull request diff:\n\n${diff}`,
+                        },
+                      ],
+                      max_tokens: 4096,
+                    }),
+                  }),
+                { retries: 2, delayMs: 2000 }
+              );
 
-              if (!response.ok) {
-                const errorText = await response.text();
-                // Log only status code and truncated error to avoid exposing sensitive info
-                core.error(`OpenAI API error: Status ${response.status}`);
-                throw new Error(`OpenAI API responded with ${response.status}: ${errorText.substring(0, 500)}`);
+              if (!response?.ok) {
+                const errorText = await safeReadBody(response);
+                throw new Error(`OpenAI API responded with ${response?.status}: ${errorText}`);
+              }
+
+              if (!isJsonResponse(response)) {
+                const bodyText = await safeReadBody(response);
+                throw new Error(`OpenAI API returned non-JSON response: ${bodyText}`);
               }
 
               // Parse JSON response with content-type validation
               const result = await parseJsonResponse(response);
               const review = result.choices?.[0]?.message?.content || 'Unable to generate review.';
 
-              // 4. Create pull request review
               await github.rest.pulls.createReview({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -239,7 +163,7 @@ jobs:
 
               core.info(`Successfully posted Codex review for PR #${prNumber}.`);
             } catch (error) {
-              // Standardized error handling: log truncated error then fail
-              core.error(`Error during Codex review: ${formatError(error)}`);
-              core.setFailed(`Review process failed: ${formatError(error)}`);
+              const message = safeErrorMessage(error);
+              core.error(`Error during Codex review: ${message}`);
+              core.setFailed(`Review process failed: ${message}`);
             }
