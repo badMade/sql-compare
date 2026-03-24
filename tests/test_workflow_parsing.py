@@ -107,5 +107,33 @@ jobs:
         """Test behavior with an empty workflow file."""
         self.assertIsNone(extract_workflow_script("", "Any Step"))
 
+
+class TestReviewWorkflows(unittest.TestCase):
+    def setUp(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        self.codex_workflow = (repo_root / ".github" / "workflows" / "codex.yml").read_text(encoding="utf-8")
+        self.jules_workflow = (repo_root / ".github" / "workflows" / "jules.yml").read_text(encoding="utf-8")
+
+    def test_workflows_use_shared_utils(self):
+        """Ensure Codex and Jules workflows import the shared review utilities."""
+        required_import = "require('./.github/actions/review-utils')"
+        self.assertIn(required_import, self.codex_workflow)
+        self.assertIn(required_import, self.jules_workflow)
+
+    def test_workflows_use_safe_error_handling(self):
+        """Both workflows should use the shared safeErrorMessage helper."""
+        helper_call = "safeErrorMessage"
+        self.assertIn(helper_call, self.codex_workflow)
+        self.assertIn(helper_call, self.jules_workflow)
+
+    def test_workflows_guard_json_parsing(self):
+        """
+        Workflows should guard JSON parsing by checking Content-Type or using
+        a helper instead of blindly calling response.json()/text().
+        """
+        json_guard_marker = "isJsonResponse"
+        self.assertIn(json_guard_marker, self.codex_workflow)
+        self.assertIn(json_guard_marker, self.jules_workflow)
+
 if __name__ == '__main__':
     unittest.main()
