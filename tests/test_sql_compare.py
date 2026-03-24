@@ -34,9 +34,9 @@ new AsyncFunction('github', 'context', 'core', script);
 """
         script_path = Path('tests/_workflow_script_tmp.js')
         parser_path = Path('tests/_workflow_parser_tmp.js')
-        script_path.write_text(script, encoding='utf-8')
-        parser_path.write_text(parser, encoding='utf-8')
         try:
+            script_path.write_text(script, encoding='utf-8')
+            parser_path.write_text(parser, encoding='utf-8')
             completed = subprocess.run(
                 ['node', str(parser_path), str(script_path)],
                 check=False,
