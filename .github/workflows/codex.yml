@@ -149,7 +149,8 @@ jobs:
                 throw new Error(`OpenAI API returned non-JSON response: ${bodyText}`);
               }
 
-              const result = await response.json();
+              // Parse JSON response with content-type validation
+              const result = await parseJsonResponse(response);
               const review = result.choices?.[0]?.message?.content || 'Unable to generate review.';
 
               await github.rest.pulls.createReview({

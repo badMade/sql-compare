@@ -149,7 +149,8 @@ jobs:
                 throw new Error(`Gemini API returned non-JSON response: ${bodyText}`);
               }
 
-              const result = await response.json();
+              // Parse JSON response with content-type validation
+              const result = await parseJsonResponse(response);
               const review = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate review.';
 
               await github.rest.pulls.createReview({
