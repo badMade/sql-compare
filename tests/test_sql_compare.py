@@ -29,7 +29,7 @@ class TestWorkflowScripts(unittest.TestCase):
         parser = """
 const fs = require('fs');
 const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
-const script = fs.readFileSync(process.argv[1], 'utf8');
+const script = fs.readFileSync(process.argv[2], 'utf8');
 new AsyncFunction('github', 'context', 'core', script);
 """
         script_path = Path('tests/_workflow_script_tmp.js')
