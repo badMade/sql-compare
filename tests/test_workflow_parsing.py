@@ -1,9 +1,10 @@
 import unittest
 import yaml
 import tempfile
+import os
 from pathlib import Path
 
-def extract_workflow_script(workflow_content: Optional[str], step_name: str) -> Optional[str]:
+def extract_workflow_script(workflow_content, step_name):
     """
     Securely parses workflow YAML content and extracts the 'script' property
     from a step matching step_name.
@@ -15,7 +16,18 @@ def extract_workflow_script(workflow_content: Optional[str], step_name: str) -> 
     except (yaml.YAMLError, TypeError, AttributeError):
         return None
 
-    if not data or not isinstance(data, dict) or not isinstance(data.get('jobs'), dict):
+    if not data or not isinstance(data, dict) or 'jobs' not in data:
+        return None
+
+    for job_id, job in data['jobs'].items():
+        if not isinstance(job, dict) or 'steps' not in job:
+            continue
+        for step in job['steps']:
+            if not isinstance(step, dict):
+                continue
+            if step.get('name') == step_name:
+                return step.get('with', {}).get('script')
+    return None
 
 class TestWorkflowParsing(unittest.TestCase):
     def test_cleanup_workflow_embedded_script_parses(self):
@@ -43,11 +55,6 @@ jobs:
 
             script = extract_workflow_script(content, "My Step")
             self.assertEqual(script.strip(), 'console.log("Hello, World!");\nreturn true;')
-
-            # Explicit cleanup test (pathlib.Path.unlink(missing_ok=True) is Python 3.8+)
-            wf_path.unlink(missing_ok=True)
-            # Second unlink should not raise FileNotFoundError because missing_ok=True
-            wf_path.unlink(missing_ok=True)
 
     def test_extract_script_missing_step(self):
         """Test behavior when the specified step name is missing."""
@@ -102,8 +109,3 @@ jobs:
 
 if __name__ == '__main__':
     unittest.main()
-import unittest
-import tempfile
-import os
-from pathlib import Path
-from typing import Optional
