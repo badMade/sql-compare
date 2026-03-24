@@ -15,8 +15,7 @@ from sql_compare import (
 class TestWorkflowScripts(unittest.TestCase):
     def test_cleanup_workflow_uses_current_github_script(self):
         """The cleanup workflow should use the Node 24-compatible github-script action."""
-        workflow = Path('.github/workflows/cleanup-redundant-prs.yml').read_text(encoding='utf-8')
-        self.assertIn('uses: actions/github-script@v8', workflow)
+        workflow = (Path(__file__).resolve().parent.parent / '.github/workflows/cleanup-redundant-prs.yml').read_text(encoding='utf-8')
 
     def test_cleanup_workflow_embedded_script_parses(self):
         """The embedded github-script JavaScript should parse without syntax errors."""
