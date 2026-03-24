@@ -62,11 +62,18 @@ jobs:
               }
 
               const prNumber = parsePrNumber(context.payload);
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
               const files = await fetchPrFilesWithPagination(github, context, prNumber, core);
               const diff = buildDiffString(files);
 
               fs.writeFileSync('pr_diff.txt', diff);
               core.setOutput('pr_number', prNumber);
+              core.setOutput('pr_title', pr.title);
+              core.setOutput('pr_body', pr.body);
 
               core.info(`Fetched diff for PR #${prNumber} (${files.length} files).`);
             } catch (error) {
@@ -80,6 +87,8 @@ jobs:
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           PR_NUMBER: ${{ steps.diff.outputs.pr_number }}
+          PR_TITLE: ${{ steps.diff.outputs.pr_title }}
+          PR_BODY: ${{ steps.diff.outputs.pr_body }}
         with:
           script: |
             const fs = require('fs');
