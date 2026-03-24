@@ -66,20 +66,34 @@ jobs:
                 return;
               }
 
-              // 2. Fetch files with pagination
+              // 2. Fetch files with pagination (capped at MAX_PAGES to avoid rate limits)
+              const MAX_PAGES = 10;
               let files = [];
               let page = 1;
               while (true) {
-                const { data: pageFiles } = await github.rest.pulls.listFiles({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: prNumber,
-                  per_page: 100,
-                  page: page,
-                });
-                files = files.concat(pageFiles);
-                if (pageFiles.length < 100) break;
-                page++;
+                if (page > MAX_PAGES) {
+                  core.setFailed(
+                    `PR diff exceeds the ${MAX_PAGES}-page limit ` +
+                    `(${MAX_PAGES * 100} files); aborting to avoid secondary rate limits.`
+                  );
+                  return;
+                }
+                try {
+                  const { data: pageFiles } = await github.rest.pulls.listFiles({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: prNumber,
+                    per_page: 100,
+                    page,
+                  });
+                  files = files.concat(pageFiles);
+                  if (pageFiles.length < 100) break;
+                  page++;
+                } catch (listError) {
+                  const msg = listError && listError.message ? listError.message : String(listError);
+                  core.setFailed(`Failed to list PR files on page ${page}: ${msg}`);
+                  return;
+                }
               }
 
               // 3. Construct diff

@@ -69,20 +69,51 @@ jobs:
                 return;
               }
 
-              // 2. Fetch all changed files with pagination
-              let files = [];
-              let page = 1;
-              while (true) {
-                const { data: pageFiles } = await github.rest.pulls.listFiles({
+              // For issue_comment events the job-level if: cannot access head.repo.full_name,
+              // so verify it here to prevent fork PRs from triggering the review with repo secrets.
+              if (context.eventName === 'issue_comment') {
+                const { data: pr } = await github.rest.pulls.get({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   pull_number: prNumber,
-                  per_page: 100,
-                  page: page,
                 });
-                files = files.concat(pageFiles);
-                if (pageFiles.length < 100) break;
-                page++;
+                const baseRepo = `${context.repo.owner}/${context.repo.repo}`;
+                if (pr.head.repo.full_name !== baseRepo) {
+                  console.log('PR is from a fork; skipping review to avoid exposing repo secrets.');
+                  return;
+                }
+              }
+
+              // 2. Fetch all changed files with pagination (capped at MAX_PAGES to avoid rate limits)
+              const MAX_PAGES = 10;
+              let files = [];
+              let page = 1;
+              while (true) {
+                if (page > MAX_PAGES) {
+                  core.setFailed(
+                    `PR diff exceeds the ${MAX_PAGES}-page limit ` +
+                    `(${MAX_PAGES * 100} files); aborting to avoid secondary rate limits.`
+                  );
+                  return;
+                }
+                try {
+                  const { data: pageFiles } = await github.rest.pulls.listFiles({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: prNumber,
+                    per_page: 100,
+                    page,
+                  });
+                  files = files.concat(pageFiles);
+                  if (pageFiles.length < 100) break;
+                  page++;
+                } catch (listError) {
+                  const msg = listError && listError.message ? listError.message : String(listError);
+                  core.setFailed(
+                    `Failed to list files for pull request #${prNumber} on page ${page}: ${msg}`
+                  );
+                  return;
+                }
               }
 
               // 3. Construct the diff string
