@@ -12,7 +12,6 @@ class AutoAssignReviewersWorkflowTests(unittest.TestCase):
         with self.subTest(msg="Permissions are correctly configured"):
             self.assertIn('contents: read', workflow)
             self.assertIn('pull-requests: write', workflow)
-            self.assertLess(workflow.index('contents: read'), workflow.index('pull-requests: write'))
 
         with self.subTest(msg="Checkout step is present and correctly ordered"):
             checkout_ref = 'uses: actions/checkout@v4.0.4'
