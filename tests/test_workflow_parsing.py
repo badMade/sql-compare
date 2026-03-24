@@ -1,7 +1,6 @@
 import unittest
 import yaml
 import tempfile
-import os
 from pathlib import Path
 
 def extract_workflow_script(workflow_content: Optional[str], step_name: str) -> Optional[str]:
