@@ -119,12 +119,25 @@ async function fetchWithRetry(requestFn, options = {}) {
   }
 }
 
+async function parseJsonResponse(response) {
+  if (!response) {
+    throw new Error('No response received.');
+  }
+  if (!isJsonResponse(response)) {
+    const status = response.status || 'unknown';
+    const bodyText = await safeReadBody(response);
+    throw new Error(`Expected JSON response but received status ${status} with content-type '${response.headers?.get('content-type') || 'none'}': ${bodyText}`);
+  }
+  return response.json();
+}
+
 module.exports = {
   buildDiffString,
   fetchPrFilesWithPagination,
   fetchWithRetry,
   isJsonResponse,
   normalizePrNumber,
+  parseJsonResponse,
   parsePrNumber,
   safeErrorMessage,
   safeReadBody,

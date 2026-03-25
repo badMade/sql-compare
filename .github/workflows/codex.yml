@@ -11,6 +11,10 @@ on:
 jobs:
   codex-review:
     # Only run on internal PRs or when @codex is mentioned
+    # Three trigger conditions:
+    # 1. pull_request event on internal PRs with 'safe-for-ai-review' label
+    # 2. issue_comment event with @codex mention by authorized users
+    # 3. pull_request_review_comment event with @codex mention by authorized users
     if: |
       (
         github.event_name == 'pull_request' &&

@@ -30,9 +30,9 @@ class TestWorkflowSecurity(unittest.TestCase):
         script = self._get_script_from_step(self.codex_workflow, 'Get PR diff')
         self.assertIsNotNone(script, "Could not find 'Get PR diff' step")
 
-        # Check for helper functions
-        self.assertIn('formatError', script, "Missing formatError helper function")
-        self.assertIn('validatePrNumber', script, "Missing validatePrNumber helper function")
+        # Check for helper functions (using actual function names from review-utils)
+        self.assertIn('safeErrorMessage', script, "Missing safeErrorMessage helper function")
+        self.assertIn('parsePrNumber', script, "Missing parsePrNumber helper function")
 
         # Check for improved logging
         self.assertIn('core.error', script, "Should use core.error for error logging")
@@ -43,9 +43,8 @@ class TestWorkflowSecurity(unittest.TestCase):
         script = self._get_script_from_step(self.codex_workflow, 'Get PR diff')
         self.assertIsNotNone(script, "Could not find 'Get PR diff' step")
 
-        # Check for MAX_PAGES constant
-        self.assertIn('MAX_PAGES', script, "Missing MAX_PAGES pagination limit")
-        self.assertIn('while (page <= MAX_PAGES)', script, "Pagination should have upper bound")
+        # fetchPrFilesWithPagination encapsulates pagination limits in review-utils
+        self.assertIn('fetchPrFilesWithPagination', script, "Missing fetchPrFilesWithPagination function that handles pagination")
 
     def test_codex_review_has_retry_logic(self):
         """Test that codex.yml review step includes retry logic."""
@@ -54,7 +53,8 @@ class TestWorkflowSecurity(unittest.TestCase):
 
         # Check for retry function
         self.assertIn('fetchWithRetry', script, "Missing fetchWithRetry helper function")
-        self.assertIn('maxRetries', script, "Retry logic should have maxRetries parameter")
+        # fetchWithRetry uses 'retries' parameter, not 'maxRetries'
+        self.assertIn('retries:', script, "Retry logic should have retries parameter")
 
     def test_codex_review_validates_content_type(self):
         """Test that codex.yml validates content-type before parsing JSON."""
@@ -70,9 +70,9 @@ class TestWorkflowSecurity(unittest.TestCase):
         script = self._get_script_from_step(self.codex_workflow, 'Review with Codex')
         self.assertIsNotNone(script, "Could not find 'Review with Codex' step")
 
-        # Check for error truncation
-        self.assertIn('truncate', script.lower(), "Should truncate error messages")
-        self.assertIn('substring', script, "Should use substring to limit error length")
+        # Check for error truncation using safeErrorMessage and safeReadBody helpers
+        self.assertIn('safeErrorMessage', script, "Should use safeErrorMessage to truncate error messages")
+        self.assertIn('safeReadBody', script, "Should use safeReadBody to safely read and truncate response bodies")
 
     def test_codex_api_key_validation(self):
         """Test that codex.yml validates API key without logging it."""
@@ -90,18 +90,17 @@ class TestWorkflowSecurity(unittest.TestCase):
         script = self._get_script_from_step(self.jules_workflow, 'Get PR diff')
         self.assertIsNotNone(script, "Could not find 'Get PR diff' step")
 
-        # Check for helper functions
-        self.assertIn('formatError', script, "Missing formatError helper function")
-        self.assertIn('validatePrNumber', script, "Missing validatePrNumber helper function")
+        # Check for helper functions (using actual function names from review-utils)
+        self.assertIn('safeErrorMessage', script, "Missing safeErrorMessage helper function")
+        self.assertIn('parsePrNumber', script, "Missing parsePrNumber helper function")
 
     def test_jules_has_pagination_limit(self):
         """Test that jules.yml has pagination limits to prevent infinite loops."""
         script = self._get_script_from_step(self.jules_workflow, 'Get PR diff')
         self.assertIsNotNone(script, "Could not find 'Get PR diff' step")
 
-        # Check for MAX_PAGES constant
-        self.assertIn('MAX_PAGES', script, "Missing MAX_PAGES pagination limit")
-        self.assertIn('while (page <= MAX_PAGES)', script, "Pagination should have upper bound")
+        # fetchPrFilesWithPagination encapsulates pagination limits in review-utils
+        self.assertIn('fetchPrFilesWithPagination', script, "Missing fetchPrFilesWithPagination function that handles pagination")
 
     def test_jules_review_has_retry_logic(self):
         """Test that jules.yml review step includes retry logic."""
@@ -110,7 +109,8 @@ class TestWorkflowSecurity(unittest.TestCase):
 
         # Check for retry function
         self.assertIn('fetchWithRetry', script, "Missing fetchWithRetry helper function")
-        self.assertIn('maxRetries', script, "Retry logic should have maxRetries parameter")
+        # fetchWithRetry uses 'retries' parameter, not 'maxRetries'
+        self.assertIn('retries:', script, "Retry logic should have retries parameter")
 
     def test_jules_review_validates_content_type(self):
         """Test that jules.yml validates content-type before parsing JSON."""
@@ -146,8 +146,8 @@ class TestWorkflowSecurity(unittest.TestCase):
             self.assertIn('try {', script, f"{workflow_name}/{step_name} should have try block")
             self.assertIn('catch', script, f"{workflow_name}/{step_name} should have catch block")
 
-            # Check for formatError usage in catch
-            self.assertIn('formatError', script, f"{workflow_name}/{step_name} should use formatError")
+            # Check for safeErrorMessage usage in catch (actual function name)
+            self.assertIn('safeErrorMessage', script, f"{workflow_name}/{step_name} should use safeErrorMessage")
 
     def test_pr_number_validation_consistency(self):
         """Test that PR number validation is consistent across workflows."""
@@ -155,13 +155,9 @@ class TestWorkflowSecurity(unittest.TestCase):
             script = self._get_script_from_step(workflow, 'Get PR diff')
             self.assertIsNotNone(script, f"Could not find 'Get PR diff' step in {workflow_name}")
 
-            # Check for validatePrNumber helper
-            self.assertIn('validatePrNumber', script,
-                         f"{workflow_name} should use validatePrNumber helper")
-            self.assertIn('parseInt', script,
-                         f"{workflow_name} should parse PR number")
-            self.assertIn('Number.isInteger', script,
-                         f"{workflow_name} should validate integer")
+            # Check for parsePrNumber helper (actual function name that encapsulates validation)
+            self.assertIn('parsePrNumber', script,
+                         f"{workflow_name} should use parsePrNumber helper")
 
 if __name__ == '__main__':
     unittest.main()
