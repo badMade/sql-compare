@@ -74,9 +74,17 @@ new AsyncFunction('github', 'context', 'core', script);
 
 class TestWorkflowScripts(unittest.TestCase):
     def test_cleanup_workflow_uses_current_github_script(self):
-        """The cleanup workflow should use actions/github-script@v7."""
+        """The cleanup workflow should use a pinned actions/github-script v7 reference."""
         workflow = Path('.github/workflows/cleanup-redundant-prs.yml').read_text(encoding='utf-8')
-        self.assertIn('uses: actions/github-script@v7', workflow)
+        expected_refs = [
+            'uses: actions/github-script@v7',
+            # Pin for security; this commit corresponds to github-script v7.
+            'uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd',
+        ]
+        self.assertTrue(
+            any(ref in workflow for ref in expected_refs),
+            "Cleanup workflow must pin github-script to v7 (tag or commit).",
+        )
 
     def test_cleanup_workflow_embedded_script_parses(self):
         """The embedded github-script JavaScript should parse without syntax errors."""

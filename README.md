@@ -111,6 +111,7 @@ This repository includes GitHub Actions for automated code reviews using OpenAI'
     *   To trigger an automatic review on a new or updated Pull Request, add the `safe-for-ai-review` label to the PR.
 3.  **Comments**:
     *   You can also trigger a review manually by commenting `@codex` or `@jules` on a Pull Request.
+    *   Reviews only run for internal PRs; comment triggers on forked PRs are ignored to protect secrets.
 
 ### Workflow Configuration
 

@@ -37,7 +37,7 @@ jobs:
               });
               core.info(`Requested reviews from users: ${reviewers.join(', ')}`);
             } catch (error) {
-              const errorMessage = error?.message || String(error);
+              const errorMessage = (error?.message || String(error)).slice(0, 500);
               core.error(`Failed to assign reviewers: ${errorMessage}`);
               core.setFailed(`Failed to assign reviewers: ${errorMessage}`);
             }

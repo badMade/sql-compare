@@ -66,6 +66,20 @@ jobs:
               }
 
               const prNumber = parsePrNumber(context.payload);
+              // Ensure we never process forked PRs when triggered from comments.
+              if (context.eventName !== 'pull_request') {
+                const { data: pr } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                });
+                const headRepo = pr?.head?.repo?.full_name;
+                if (headRepo && headRepo !== `${context.repo.owner}/${context.repo.repo}`) {
+                  core.info(`Skipping Codex review for external PR #${prNumber} from ${headRepo}.`);
+                  return;
+                }
+              }
+
               const files = await fetchPrFilesWithPagination(github, context, prNumber, core);
               const diff = buildDiffString(files);
 
@@ -93,6 +107,7 @@ jobs:
               fetchWithRetry,
               isJsonResponse,
               normalizePrNumber,
+              parseJsonResponse,
               safeErrorMessage,
               safeReadBody,
             } = require('./.github/actions/review-utils');
@@ -152,7 +167,10 @@ jobs:
 
               if (!isJsonResponse(response)) {
                 const bodyText = await safeReadBody(response);
-                throw new Error(`OpenAI API returned non-JSON response: ${bodyText}`);
+                const status = response?.status ?? 'unknown';
+                throw new Error(
+                  `OpenAI API returned non-JSON response (status ${status}): ${bodyText}`
+                );
               }
 
               // Parse JSON response with content-type validation

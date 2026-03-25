@@ -69,6 +69,18 @@ function isJsonResponse(response) {
   return typeof contentType === 'string' && contentType.toLowerCase().includes('application/json');
 }
 
+function parseJsonResponse(response) {
+  if (!response) {
+    throw new Error('No response received to parse.');
+  }
+  if (!isJsonResponse(response)) {
+    const status = response?.status ?? 'unknown';
+    const contentType = response?.headers?.get?.('content-type') || 'unknown';
+    throw new Error(`Expected JSON response (status ${status}, content-type ${contentType}).`);
+  }
+  return response.json();
+}
+
 async function safeReadBody(response, maxLength = MAX_ERROR_CHARS) {
   if (!response) {
     return 'No response received.';
@@ -124,6 +136,7 @@ module.exports = {
   fetchPrFilesWithPagination,
   fetchWithRetry,
   isJsonResponse,
+  parseJsonResponse,
   normalizePrNumber,
   parsePrNumber,
   safeErrorMessage,
