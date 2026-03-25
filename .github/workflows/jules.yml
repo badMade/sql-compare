@@ -51,10 +51,58 @@ jobs:
             const fs = require('fs');
             const {
               buildDiffString,
-              fetchPrFilesWithPagination,
-              parsePrNumber,
               safeErrorMessage,
             } = require('./.github/actions/review-utils');
+
+            const MAX_PAGES = 10;
+            const PER_PAGE = 100;
+            const MAX_ERROR_CHARS = 500;
+
+            function truncate(message, maxLength = MAX_ERROR_CHARS) {
+              if (typeof message !== 'string') {
+                return '';
+              }
+              return message.length > maxLength ? `${message.substring(0, maxLength)}...` : message;
+            }
+
+            function formatError(error) {
+              return truncate(safeErrorMessage(error, MAX_ERROR_CHARS), MAX_ERROR_CHARS);
+            }
+
+            function validatePrNumber(rawNumber) {
+              const parsed = Number.parseInt(rawNumber, 10);
+              if (!Number.isInteger(parsed) || parsed <= 0) {
+                throw new Error('Invalid pull request number.');
+              }
+              return parsed;
+            }
+
+            async function fetchPrFilesWithPagination(github, context, prNumber, core) {
+              const files = [];
+              let page = 1;
+
+              while (page <= MAX_PAGES) {
+                const { data: pageFiles } = await github.rest.pulls.listFiles({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  per_page: PER_PAGE,
+                  page,
+                });
+                files.push(...pageFiles);
+
+                if (pageFiles.length < PER_PAGE) {
+                  break;
+                }
+                page += 1;
+              }
+
+              if (page > MAX_PAGES) {
+                throw new Error(`Reached pagination cap (${MAX_PAGES} pages) while fetching PR files.`);
+              }
+
+              return files;
+            }
 
             try {
               if (context.eventName === 'issue_comment' && !context.payload.issue?.pull_request) {
@@ -62,16 +110,25 @@ jobs:
                 return;
               }
 
-              const prNumber = parsePrNumber(context.payload);
+              const rawPrNumber = context.payload.pull_request?.number ?? context.payload.issue?.number;
+              const prNumber = validatePrNumber(rawPrNumber);
+
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              });
               const files = await fetchPrFilesWithPagination(github, context, prNumber, core);
               const diff = buildDiffString(files);
 
               fs.writeFileSync('pr_diff.txt', diff);
               core.setOutput('pr_number', prNumber);
+              core.setOutput('pr_title', pr.title || '');
+              core.setOutput('pr_body', pr.body || '');
 
               core.info(`Fetched diff for PR #${prNumber} (${files.length} files).`);
             } catch (error) {
-              const message = safeErrorMessage(error);
+              const message = formatError(error);
               core.error(`Error fetching PR diff: ${message}`);
               core.setFailed(`Failed to get PR diff: ${message}`);
             }
@@ -92,14 +149,39 @@ jobs:
               safeReadBody,
             } = require('./.github/actions/review-utils');
 
+            const MAX_ERROR_CHARS = 500;
+            const maxRetries = 2;
+
+            function truncate(message, maxLength = MAX_ERROR_CHARS) {
+              if (typeof message !== 'string') {
+                return '';
+              }
+              return message.length > maxLength ? `${message.substring(0, maxLength)}...` : message;
+            }
+
+            function formatError(error) {
+              return truncate(safeErrorMessage(error, MAX_ERROR_CHARS), MAX_ERROR_CHARS);
+            }
+
+            async function parseJsonResponse(response) {
+              const contentType = response?.headers?.get?.('content-type') || '';
+              const normalizedType = contentType.toLowerCase();
+              if (!normalizedType.includes('application/json')) {
+                throw new Error(`Unexpected content-type: ${contentType || 'unknown'}`);
+              }
+              return response.json();
+            }
+
             try {
               const prNumber = normalizePrNumber(process.env.PR_NUMBER);
+              const prTitle = process.env.PR_TITLE || '';
+              const prBody = process.env.PR_BODY || '';
 
               let diff;
               try {
                 diff = fs.readFileSync('pr_diff.txt', 'utf8');
               } catch (readError) {
-                const message = safeErrorMessage(readError);
+                const message = formatError(readError);
                 core.setFailed(`Could not read PR diff file: ${message}`);
                 return;
               }
@@ -128,7 +210,7 @@ jobs:
                                 text:
                                   'You are a code reviewer. Review the following PR diff. ' +
                                   'Identify bugs, security issues, style problems, and suggest improvements. ' +
-                                  `Be concise and actionable.\n\nPR Diff:\n${diff}`,
+                                  `Be concise and actionable.\n\nTitle: ${prTitle}\n\nDescription:\n${prBody}\n\nPR Diff:\n${diff}`,
                               },
                             ],
                           },
@@ -137,7 +219,7 @@ jobs:
                       }),
                     }
                   ),
-                { retries: 2, delayMs: 2000 }
+                { retries: maxRetries, maxRetries, delayMs: 2000 }
               );
 
               if (!response?.ok) {
@@ -145,12 +227,6 @@ jobs:
                 throw new Error(`Gemini API responded with ${response?.status}: ${errorText}`);
               }
 
-              if (!isJsonResponse(response)) {
-                const bodyText = await safeReadBody(response);
-                throw new Error(`Gemini API returned non-JSON response: ${bodyText}`);
-              }
-
-              // Parse JSON response with content-type validation
               const result = await parseJsonResponse(response);
               const review = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate review.';
 
@@ -164,7 +240,7 @@ jobs:
 
               core.info(`Successfully posted Jules review for PR #${prNumber}.`);
             } catch (error) {
-              const message = safeErrorMessage(error);
+              const message = formatError(error);
               core.error(`Error during Jules review: ${message}`);
               core.setFailed(`Review process failed: ${message}`);
             }
