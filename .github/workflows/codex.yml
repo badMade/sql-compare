@@ -54,10 +54,26 @@ jobs:
             const fs = require('fs');
             const {
               buildDiffString,
-              fetchPrFilesWithPagination,
-              parsePrNumber,
               safeErrorMessage,
+              truncateMessage,
+              validatePrNumber,
             } = require('./.github/actions/review-utils');
+
+            const MAX_PAGES = 10;
+            const PER_PAGE = 100;
+
+            function formatError(error) {
+              return truncateMessage(safeErrorMessage(error));
+            }
+
+            function validateAndParsePr(payload) {
+              const rawNumber = payload?.pull_request?.number ?? payload?.issue?.number;
+              const parsed = parseInt(rawNumber, 10);
+              if (!Number.isInteger(parsed) || parsed <= 0) {
+                throw new Error('Invalid pull request number.');
+              }
+              return validatePrNumber(parsed);
+            }
 
             try {
               if (context.eventName === 'issue_comment' && !context.payload.issue?.pull_request) {
@@ -65,8 +81,31 @@ jobs:
                 return;
               }
 
-              const prNumber = parsePrNumber(context.payload);
-              const files = await fetchPrFilesWithPagination(github, context, prNumber, core);
+              const prNumber = validateAndParsePr(context.payload);
+              let page = 1;
+              const files = [];
+              while (page <= MAX_PAGES) {
+                const { data: pageFiles } = await github.rest.pulls.listFiles({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: prNumber,
+                  per_page: PER_PAGE,
+                  page,
+                });
+
+                files.push(...pageFiles);
+
+                if (pageFiles.length < PER_PAGE) {
+                  break;
+                }
+
+                page += 1;
+              }
+
+              if (page > MAX_PAGES && files.length && files.length % PER_PAGE === 0) {
+                throw new Error(`Reached MAX_PAGES (${MAX_PAGES}) while fetching PR files.`);
+              }
+
               const diff = buildDiffString(files);
 
               fs.writeFileSync('pr_diff.txt', diff);
@@ -74,7 +113,7 @@ jobs:
 
               core.info(`Fetched diff for PR #${prNumber} (${files.length} files).`);
             } catch (error) {
-              const message = safeErrorMessage(error);
+              const message = formatError(error);
               core.error(`Error fetching PR diff: ${message}`);
               core.setFailed(`Failed to get PR diff: ${message}`);
             }
@@ -92,10 +131,22 @@ jobs:
             const {
               fetchWithRetry,
               isJsonResponse,
+              parseJsonResponse,
               normalizePrNumber,
               safeErrorMessage,
               safeReadBody,
             } = require('./.github/actions/review-utils');
+
+            const truncate = (value, max = 500) => {
+              const text = typeof value === 'string' ? value : value ? String(value) : '';
+              return text.length > max ? `${text.substring(0, max)}...` : text;
+            };
+
+            const formatError = (error) => truncate(safeErrorMessage(error));
+
+            async function ensureJson(response) {
+              return parseJsonResponse(response);
+            }
 
             try {
               const prNumber = normalizePrNumber(process.env.PR_NUMBER);
@@ -142,7 +193,7 @@ jobs:
                       max_tokens: 4096,
                     }),
                   }),
-                { retries: 2, delayMs: 2000 }
+                { maxRetries: 2, delayMs: 2000 }
               );
 
               if (!response?.ok) {
@@ -152,11 +203,15 @@ jobs:
 
               if (!isJsonResponse(response)) {
                 const bodyText = await safeReadBody(response);
-                throw new Error(`OpenAI API returned non-JSON response: ${bodyText}`);
+                throw new Error(
+                  `OpenAI API returned non-JSON response with content-type ${
+                    response?.headers?.get?.('content-type') || 'missing'
+                  }: ${truncate(bodyText)}`
+                );
               }
 
               // Parse JSON response with content-type validation
-              const result = await parseJsonResponse(response);
+              const result = await ensureJson(response);
               const review = result.choices?.[0]?.message?.content || 'Unable to generate review.';
 
               await github.rest.pulls.createReview({
@@ -169,7 +224,7 @@ jobs:
 
               core.info(`Successfully posted Codex review for PR #${prNumber}.`);
             } catch (error) {
-              const message = safeErrorMessage(error);
+              const message = formatError(error);
               core.error(`Error during Codex review: ${message}`);
               core.setFailed(`Review process failed: ${message}`);
             }
