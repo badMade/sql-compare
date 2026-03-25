@@ -1,9 +1,11 @@
-import unittest
-import subprocess
+import argparse
 import shutil
+import subprocess
 import textwrap
+import unittest
 from pathlib import Path
 from unittest.mock import patch
+
 from sql_compare import (
     _extract_base_table,
     canonicalize_joins, clause_end_index, tokenize,
@@ -16,39 +18,53 @@ from sql_compare import (
 
 
 class TestWorkflowScripts(unittest.TestCase):
+    def _get_workflow_path(self):
+        return Path(__file__).resolve().parents[1] / '.github/workflows/cleanup-redundant-prs.yml'
+
+    def _get_workflow_content(self):
+        return self._get_workflow_path().read_text(encoding='utf-8')
+
     def test_cleanup_workflow_uses_current_github_script(self):
-        """The cleanup workflow should use actions/github-script@v7."""
-        workflow = Path('.github/workflows/cleanup-redundant-prs.yml').read_text(encoding='utf-8')
-        self.assertIn('uses: actions/github-script@v7', workflow)
+        """The cleanup workflow should use the Node 24-compatible github-script action."""
+        workflow = self._get_workflow_content()
+        self.assertIn('uses: actions/github-script@v8', workflow)
 
     def test_cleanup_workflow_embedded_script_parses(self):
         """The embedded github-script JavaScript should parse without syntax errors."""
         if shutil.which('node') is None:
-            self.skipTest("Node.js executable not found on PATH. Skipping test.")
+            self.skipTest('Node.js executable not found on PATH. Skipping test.')
             return
 
-        workflow = Path('.github/workflows/cleanup-redundant-prs.yml').read_text(encoding='utf-8')
+        workflow = self._get_workflow_content()
+        workflow_lines = workflow.splitlines()
 
         # Find the 'script: |' line and its indentation
-        workflow_lines = workflow.splitlines()
-        script_content_lines = []
-        in_script_block = False
+        script_start_line_idx = -1
         script_block_indent = -1
 
-        for line in workflow_lines:
-            if in_script_block:
-                if not line.strip() or (len(line) - len(line.lstrip())) > script_block_indent:
-                    script_content_lines.append(line)
-                else:
-                    break
-            elif line.lstrip().startswith('script: |'):
-                in_script_block = True
-                script_block_indent = len(line) - len(line.lstrip())
+        for i, line in enumerate(workflow_lines):
+            stripped_line = line.lstrip()
+            if stripped_line.startswith('script: |'):
+                script_start_line_idx = i
+                script_block_indent = len(line) - len(stripped_line)
+                break
 
-        if script_content_lines:
-            script = textwrap.dedent('\n'.join(script_content_lines))
-        else:
-            script = ''
+        self.assertNotEqual(script_start_line_idx, -1, 'Could not find "script: |" block in workflow.')
+
+        script_content_lines = []
+        # Iterate from the line *after* 'script: |'
+        for i in range(script_start_line_idx + 1, len(workflow_lines)):
+            line = workflow_lines[i]
+            # A line is part of the script if it's more indented than the 'script: |' line,
+            # or if it's an empty line (which should be preserved as part of the script block).
+            if not line.strip() or (len(line) - len(line.lstrip())) > script_block_indent:
+                script_content_lines.append(line)
+            else:
+                # The script block has ended
+                break
+
+        script = textwrap.dedent('\n'.join(script_content_lines))
+
         parser = """
 const fs = require('fs');
 const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
