@@ -34,33 +34,24 @@ class TestWorkflowScripts(unittest.TestCase):
 
         # Find the 'script: |' line and its indentation
         workflow_lines = workflow.splitlines()
-        script_start_line_idx = -1
+        script_content_lines = []
+        in_script_block = False
         script_block_indent = -1
 
-        for i, line in enumerate(workflow_lines):
-            stripped_line = line.lstrip()
-            if stripped_line.startswith('script: |'):
-                script_start_line_idx = i
-                script_block_indent = len(line) - len(stripped_line)
-                break
-
-        if script_start_line_idx == -1:
-            script = '' # Fallback if 'script: |' is not found
-        else:
-            script_content_lines = []
-            # Iterate from the line *after* 'script: |'
-            for i in range(script_start_line_idx + 1, len(workflow_lines)):
-                line = workflow_lines[i]
-                # A line is part of the script if it's more indented than the 'script: |' line,
-                # or if it's an empty line (which should be preserved as part of the script block).
+        for line in workflow_lines:
+            if in_script_block:
                 if not line.strip() or (len(line) - len(line.lstrip())) > script_block_indent:
                     script_content_lines.append(line)
                 else:
-                    # The script block has ended
                     break
+            elif line.lstrip().startswith('script: |'):
+                in_script_block = True
+                script_block_indent = len(line) - len(line.lstrip())
 
-            script = '\n'.join(script_content_lines)
-            script = textwrap.dedent(script)
+        if script_content_lines:
+            script = textwrap.dedent('\n'.join(script_content_lines))
+        else:
+            script = ''
         parser = """
 const fs = require('fs');
 const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
