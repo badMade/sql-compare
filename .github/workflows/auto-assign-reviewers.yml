@@ -15,11 +15,17 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
           script: |
-            const teamReviewers = []; // Add team names here
+            const reviewers = []; // Add individual collaborator usernames here
+
+            if (!context.payload.pull_request) {
+              core.warning('No pull_request payload found, skipping reviewer assignment.');
+              return;
+            }
+
             const prNumber = context.payload.pull_request.number;
 
-            if (teamReviewers.length === 0) {
-              console.log('No team reviewers specified, skipping.');
+            if (reviewers.length === 0) {
+              core.info('No reviewers specified, skipping.');
               return;
             }
 
@@ -27,15 +33,15 @@ jobs:
               await github.rest.pulls.requestReviewers({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                pull_number: pullRequestNumber,
-                team_reviewers: collaboratorTeamSlugs,
+                pull_number: prNumber,
+                reviewers: reviewers,
               });
-              console.log(`Requested reviews from teams: ${collaboratorTeamSlugs.join(', ')}`);
+              core.info(`Requested reviews from users: ${reviewers.join(', ')}`);
             } catch (error) {
-              const errorMessage = error?.message || String(error);
+              const errorMessage = error && error.message ? error.message : String(error);
 
               // Log the low-level error for workflow debugging, then mark the
               // action as failed with a concise message for the job summary.
-              console.error('Reviewer assignment request failed:', errorMessage);
+              core.error(`Reviewer assignment request failed: ${errorMessage.slice(0, 500)}`);
               core.setFailed('Failed to assign reviewers.');
             }
