@@ -3,7 +3,7 @@ import yaml
 from pathlib import Path
 
 class TestWorkflowSecurity(unittest.TestCase):
-    """Tests for security improvements in workflow files."""
+    """Tests for security and consistency in workflow files."""
 
     def setUp(self):
         """Load workflow files."""
@@ -25,143 +25,83 @@ class TestWorkflowSecurity(unittest.TestCase):
                     return step.get('with', {}).get('script', '')
         return None
 
-    def test_codex_has_helper_functions(self):
-        """Test that codex.yml includes helper functions for error handling."""
-        script = self._get_script_from_step(self.codex_workflow, 'Get PR diff')
-        self.assertIsNotNone(script, "Could not find 'Get PR diff' step")
+    def _verify_workflow_step_security(self, workflow, step_name, workflow_label):
+        """Shared helper to verify security best practices in a workflow step."""
+        script = self._get_script_from_step(workflow, step_name)
+        self.assertIsNotNone(script, f"Could not find '{step_name}' step in {workflow_label}")
 
-        # Check for helper functions
-        self.assertIn('formatError', script, "Missing formatError helper function")
-        self.assertIn('validatePrNumber', script, "Missing validatePrNumber helper function")
+        if step_name == 'Get PR diff':
+            # Check for core helper functions from review-utils.js
+            self.assertIn('parsePrNumber', script, f"{workflow_label}/{step_name} should use parsePrNumber")
+            self.assertIn('fetchPrFilesWithPagination', script, f"{workflow_label}/{step_name} should use fetchPrFilesWithPagination")
+            self.assertIn('safeErrorMessage', script, f"{workflow_label}/{step_name} should use safeErrorMessage")
+        elif 'Review with' in step_name:
+            # Check for review step security features
+            self.assertIn('normalizePrNumber', script, f"{workflow_label}/{step_name} should use normalizePrNumber")
+            self.assertIn('fetchWithRetry', script, f"{workflow_label}/{step_name} should use fetchWithRetry")
+            self.assertIn('parseJsonResponse', script, f"{workflow_label}/{step_name} should use parseJsonResponse")
+            self.assertIn('safeErrorMessage', script, f"{workflow_label}/{step_name} should use safeErrorMessage")
+            # Ensure API keys are not logged
+            api_key_env = 'OPENAI_API_KEY' if 'Codex' in step_name else 'GOOGLE_API_KEY'
+            self.assertNotIn(f'console.log(process.env.{api_key_env})', script, f"{workflow_label} should not log API key")
 
-        # Check for improved logging
-        self.assertIn('core.error', script, "Should use core.error for error logging")
-        self.assertIn('core.info', script, "Should use core.info for info logging")
+        # Check for consistent logging
+        self.assertIn('core.error', script, f"{workflow_label}/{step_name} should use core.error")
+        self.assertIn('core.info', script, f"{workflow_label}/{step_name} should use core.info")
+        self.assertIn('try {', script, f"{workflow_label}/{step_name} should have try block")
+        self.assertIn('catch', script, f"{workflow_label}/{step_name} should have catch block")
 
-    def test_codex_has_pagination_limit(self):
-        """Test that codex.yml has pagination limits to prevent infinite loops."""
-        script = self._get_script_from_step(self.codex_workflow, 'Get PR diff')
-        self.assertIsNotNone(script, "Could not find 'Get PR diff' step")
+    def test_codex_get_diff_security(self):
+        """Verify security of Codex Get PR diff step."""
+        self._verify_workflow_step_security(self.codex_workflow, 'Get PR diff', 'codex.yml')
 
-        # Check for MAX_PAGES constant
-        self.assertIn('MAX_PAGES', script, "Missing MAX_PAGES pagination limit")
-        self.assertIn('while (page <= MAX_PAGES)', script, "Pagination should have upper bound")
+    def test_codex_review_security(self):
+        """Verify security of Codex review step."""
+        self._verify_workflow_step_security(self.codex_workflow, 'Review with Codex', 'codex.yml')
 
-    def test_codex_review_has_retry_logic(self):
-        """Test that codex.yml review step includes retry logic."""
-        script = self._get_script_from_step(self.codex_workflow, 'Review with Codex')
-        self.assertIsNotNone(script, "Could not find 'Review with Codex' step")
+    def test_jules_get_diff_security(self):
+        """Verify security of Jules Get PR diff step."""
+        self._verify_workflow_step_security(self.jules_workflow, 'Get PR diff', 'jules.yml')
 
-        # Check for retry function
-        self.assertIn('fetchWithRetry', script, "Missing fetchWithRetry helper function")
-        self.assertIn('maxRetries', script, "Retry logic should have maxRetries parameter")
+    def test_jules_review_security(self):
+        """Verify security of Jules review step."""
+        self._verify_workflow_step_security(self.jules_workflow, 'Review with Jules (Gemini)', 'jules.yml')
 
-    def test_codex_review_validates_content_type(self):
-        """Test that codex.yml validates content-type before parsing JSON."""
-        script = self._get_script_from_step(self.codex_workflow, 'Review with Codex')
-        self.assertIsNotNone(script, "Could not find 'Review with Codex' step")
+    def test_workflows_import_utils(self):
+        """Ensure both workflows import the review-utils library."""
+        for workflow_name, workflow in [('codex.yml', self.codex_workflow), ('jules.yml', self.jules_workflow)]:
+            for job in workflow.get('jobs', {}).values():
+                for step in job.get('steps', []):
+                    script = step.get('with', {}).get('script', '')
+                    if 'require' in script and 'review-utils' in script:
+                        self.assertIn("./.github/actions/review-utils", script,
+                                     f"{workflow_name} should import review-utils with correct path")
 
-        # Check for content-type validation
-        self.assertIn('parseJsonResponse', script, "Missing parseJsonResponse helper function")
-        self.assertIn('content-type', script, "Should validate content-type header")
+    def test_jules_workflow_triggers(self):
+        """Verify Jules workflow has consistent triggers with Codex."""
+        triggers = self.jules_workflow.get('on', {})
+        self.assertIn('pull_request', triggers)
+        self.assertIn('synchronize', triggers['pull_request']['types'])
+        self.assertIn('issue_comment', triggers)
+        self.assertIn('pull_request_review_comment', triggers)
 
-    def test_codex_review_truncates_errors(self):
-        """Test that codex.yml truncates error messages to prevent sensitive data exposure."""
-        script = self._get_script_from_step(self.codex_workflow, 'Review with Codex')
-        self.assertIsNotNone(script, "Could not find 'Review with Codex' step")
-
-        # Check for error truncation
-        self.assertIn('truncate', script.lower(), "Should truncate error messages")
-        self.assertIn('substring', script, "Should use substring to limit error length")
-
-    def test_codex_api_key_validation(self):
-        """Test that codex.yml validates API key without logging it."""
-        script = self._get_script_from_step(self.codex_workflow, 'Review with Codex')
-        self.assertIsNotNone(script, "Could not find 'Review with Codex' step")
-
-        # Check for API key validation
-        self.assertIn('OPENAI_API_KEY', script, "Should reference OPENAI_API_KEY")
-        # Ensure we're not logging the key value directly
-        self.assertNotIn('console.log(process.env.OPENAI_API_KEY)', script,
-                        "Should not log API key value")
-
-    def test_jules_has_helper_functions(self):
-        """Test that jules.yml includes helper functions for error handling."""
-        script = self._get_script_from_step(self.jules_workflow, 'Get PR diff')
-        self.assertIsNotNone(script, "Could not find 'Get PR diff' step")
-
-        # Check for helper functions
-        self.assertIn('formatError', script, "Missing formatError helper function")
-        self.assertIn('validatePrNumber', script, "Missing validatePrNumber helper function")
-
-    def test_jules_has_pagination_limit(self):
-        """Test that jules.yml has pagination limits to prevent infinite loops."""
-        script = self._get_script_from_step(self.jules_workflow, 'Get PR diff')
-        self.assertIsNotNone(script, "Could not find 'Get PR diff' step")
-
-        # Check for MAX_PAGES constant
-        self.assertIn('MAX_PAGES', script, "Missing MAX_PAGES pagination limit")
-        self.assertIn('while (page <= MAX_PAGES)', script, "Pagination should have upper bound")
-
-    def test_jules_review_has_retry_logic(self):
-        """Test that jules.yml review step includes retry logic."""
+    def test_jules_gemini_api_security(self):
+        """Verify Jules uses secure header for Gemini API key."""
         script = self._get_script_from_step(self.jules_workflow, 'Review with Jules (Gemini)')
-        self.assertIsNotNone(script, "Could not find 'Review with Jules (Gemini)' step")
+        self.assertIn("'x-goog-api-key': process.env.GOOGLE_API_KEY", script)
+        self.assertNotIn("key=${process.env.GOOGLE_API_KEY}", script)
 
-        # Check for retry function
-        self.assertIn('fetchWithRetry', script, "Missing fetchWithRetry helper function")
-        self.assertIn('maxRetries', script, "Retry logic should have maxRetries parameter")
+    def test_review_utils_has_security_features(self):
+        """Verify that review-utils.js itself has security constants and helper functions."""
+        utils_path = Path(__file__).parent.parent / ".github" / "actions" / "review-utils.js"
+        content = utils_path.read_text(encoding='utf-8')
 
-    def test_jules_review_validates_content_type(self):
-        """Test that jules.yml validates content-type before parsing JSON."""
-        script = self._get_script_from_step(self.jules_workflow, 'Review with Jules (Gemini)')
-        self.assertIsNotNone(script, "Could not find 'Review with Jules (Gemini)' step")
-
-        # Check for content-type validation
-        self.assertIn('parseJsonResponse', script, "Missing parseJsonResponse helper function")
-        self.assertIn('content-type', script, "Should validate content-type header")
-
-    def test_both_workflows_use_core_logging(self):
-        """Test that both workflows use core.error, core.info, core.warning instead of console.log."""
-        for workflow_name, workflow in [('codex', self.codex_workflow), ('jules', self.jules_workflow)]:
-            script = self._get_script_from_step(workflow, 'Get PR diff')
-            self.assertIsNotNone(script, f"Could not find 'Get PR diff' step in {workflow_name}")
-
-            # Should use core logging methods
-            self.assertIn('core.error', script, f"{workflow_name} should use core.error")
-            self.assertIn('core.info', script, f"{workflow_name} should use core.info")
-
-    def test_error_handler_catches_all_exceptions(self):
-        """Test that error handlers catch and format all exception types."""
-        for workflow_name, workflow, step_name in [
-            ('codex', self.codex_workflow, 'Get PR diff'),
-            ('codex', self.codex_workflow, 'Review with Codex'),
-            ('jules', self.jules_workflow, 'Get PR diff'),
-            ('jules', self.jules_workflow, 'Review with Jules (Gemini)')
-        ]:
-            script = self._get_script_from_step(workflow, step_name)
-            self.assertIsNotNone(script, f"Could not find '{step_name}' step in {workflow_name}")
-
-            # Check for try-catch blocks
-            self.assertIn('try {', script, f"{workflow_name}/{step_name} should have try block")
-            self.assertIn('catch', script, f"{workflow_name}/{step_name} should have catch block")
-
-            # Check for formatError usage in catch
-            self.assertIn('formatError', script, f"{workflow_name}/{step_name} should use formatError")
-
-    def test_pr_number_validation_consistency(self):
-        """Test that PR number validation is consistent across workflows."""
-        for workflow_name, workflow in [('codex', self.codex_workflow), ('jules', self.jules_workflow)]:
-            script = self._get_script_from_step(workflow, 'Get PR diff')
-            self.assertIsNotNone(script, f"Could not find 'Get PR diff' step in {workflow_name}")
-
-            # Check for validatePrNumber helper
-            self.assertIn('validatePrNumber', script,
-                         f"{workflow_name} should use validatePrNumber helper")
-            self.assertIn('parseInt', script,
-                         f"{workflow_name} should parse PR number")
-            self.assertIn('Number.isInteger', script,
-                         f"{workflow_name} should validate integer")
+        self.assertIn('MAX_ERROR_CHARS = 500', content)
+        self.assertIn('DEFAULT_MAX_PAGES = 10', content)
+        self.assertIn('function safeErrorMessage', content)
+        self.assertIn('function fetchPrFilesWithPagination', content)
+        self.assertIn('function fetchWithRetry', content)
+        self.assertIn('function parseJsonResponse', content)
 
 if __name__ == '__main__':
     unittest.main()

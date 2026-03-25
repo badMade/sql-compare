@@ -89,6 +89,21 @@ async function safeReadBody(response, maxLength = MAX_ERROR_CHARS) {
   }
 }
 
+function parseJsonResponse(response) {
+  if (!isJsonResponse(response)) {
+    return safeReadBody(response).then((bodyText) => {
+      throw new Error(
+        `API returned non-JSON response (status ${response?.status}): ${bodyText}`
+      );
+    });
+  }
+  return response.json().catch((error) => {
+    throw new Error(
+      `Failed to parse JSON response (status ${response?.status}): ${safeErrorMessage(error)}`
+    );
+  });
+}
+
 async function fetchWithRetry(requestFn, options = {}) {
   const {
     retries = 2,
@@ -126,6 +141,7 @@ module.exports = {
   isJsonResponse,
   normalizePrNumber,
   parsePrNumber,
+  parseJsonResponse,
   safeErrorMessage,
   safeReadBody,
 };
