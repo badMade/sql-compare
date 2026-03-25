@@ -1,6 +1,6 @@
 name: Auto-assign reviewers
 
-on:
+"on":
   pull_request:
     types: [opened, reopened]
 
@@ -15,11 +15,12 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
           script: |
-            const teamReviewers = []; // Add team names here
+            // List of individual GitHub usernames who are collaborators on this repository
+            const reviewers = []; // Add individual GitHub usernames here (e.g., ['user1', 'user2'])
             const prNumber = context.payload.pull_request.number;
 
-            if (teamReviewers.length === 0) {
-              console.log('No team reviewers specified, skipping.');
+            if (reviewers.length === 0) {
+              console.log('No individual reviewers specified, skipping.');
               return;
             }
 
@@ -27,10 +28,10 @@ jobs:
               await github.rest.pulls.requestReviewers({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                pull_number: pullRequestNumber,
-                team_reviewers: collaboratorTeamSlugs,
+                pull_number: prNumber,
+                reviewers: reviewers,
               });
-              console.log(`Requested reviews from teams: ${collaboratorTeamSlugs.join(', ')}`);
+              console.log(`Requested reviews from users: ${reviewers.join(', ')}`);
             } catch (error) {
               const errorMessage = error?.message || String(error);
 
