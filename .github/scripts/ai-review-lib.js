@@ -26,9 +26,17 @@ async function getPrDiff(github, context, prNumber) {
       page: page,
     });
     files = files.concat(pageFiles);
-    if (pageFiles.length < 100) break;
+    // If fewer than 100 files are returned, we've reached the last page.
+    if (pageFiles.length < 100) {
+      break;
+    }
+    // Enforce a hard safety limit of 10 pages (1000 files). If we hit this
+    // limit while still receiving full pages, the diff would be truncated,
+    // so fail explicitly instead of returning a partial diff.
+    if (page >= 10) {
+      throw new Error('Pull request has more than 1000 changed files; diff generation is aborted to avoid returning a truncated result.');
+    }
     page++;
-    if (page > 10) break; // Safety limit: max 1000 files
   }
 
   return files.map(f =>
