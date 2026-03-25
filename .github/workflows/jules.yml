@@ -95,6 +95,7 @@ jobs:
               fetchWithRetry,
               isJsonResponse,
               normalizePrNumber,
+              parseJsonResponse,
               safeErrorMessage,
               safeReadBody,
             } = require('./.github/actions/review-utils');

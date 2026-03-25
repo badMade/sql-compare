@@ -69,6 +69,14 @@ function isJsonResponse(response) {
   return typeof contentType === 'string' && contentType.toLowerCase().includes('application/json');
 }
 
+async function parseJsonResponse(response) {
+  try {
+    return await response.json();
+  } catch (error) {
+    throw new Error(`Failed to parse JSON response: ${safeErrorMessage(error)}`);
+  }
+}
+
 async function safeReadBody(response, maxLength = MAX_ERROR_CHARS) {
   if (!response) {
     return 'No response received.';
@@ -126,6 +134,7 @@ module.exports = {
   isJsonResponse,
   normalizePrNumber,
   parsePrNumber,
+  parseJsonResponse,
   safeErrorMessage,
   safeReadBody,
 };
