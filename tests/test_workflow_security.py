@@ -163,5 +163,104 @@ class TestWorkflowSecurity(unittest.TestCase):
             self.assertIn('Number.isInteger', script,
                          f"{workflow_name} should validate integer")
 
+class TestWorkflowIfConditions(unittest.TestCase):
+    """Tests that verify the job-level 'if' conditions behave correctly."""
+
+    def setUp(self):
+        """Load workflow files."""
+        self.workflows_dir = Path(__file__).parent.parent / ".github" / "workflows"
+        self.codex_workflow = self._load_workflow("codex.yml")
+        self.jules_workflow = self._load_workflow("jules.yml")
+
+    def _load_workflow(self, filename):
+        workflow_path = self.workflows_dir / filename
+        with open(workflow_path, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f)
+
+    def _get_job_if(self, workflow, job_name):
+        """Return the 'if' expression string for a given job."""
+        job = workflow.get('jobs', {}).get(job_name)
+        if job is None:
+            return None
+        return job.get('if', '')
+
+    def _get_pr_event_branch(self, condition):
+        """Extract the pull_request event branch from the job 'if' condition.
+
+        Top-level OR groups are delimited by ') || (' so we split on that
+        pattern and identify the branch that contains 'pull_request' as the
+        event name (not as part of 'pull_request_review_comment').
+        """
+        # Split on the top-level OR separator used in both workflow files
+        branches = condition.split(') || (')
+        pr_branches = [
+            b for b in branches
+            if "github.event_name == 'pull_request'" in b
+            and "github.event_name == 'pull_request_review_comment'" not in b
+        ]
+        return pr_branches[0] if pr_branches else None
+
+    def test_codex_pull_request_does_not_require_label(self):
+        """pull_request events on internal PRs must run without the safe-for-ai-review label."""
+        condition = self._get_job_if(self.codex_workflow, 'codex-review')
+        self.assertIsNotNone(condition)
+        pr_branch = self._get_pr_event_branch(condition)
+        self.assertIsNotNone(pr_branch, "Could not locate pull_request branch in codex if-condition")
+        self.assertNotIn('safe-for-ai-review', pr_branch,
+                         "pull_request branch must not require 'safe-for-ai-review' label; "
+                         "it was causing internal PRs to be skipped.")
+
+    def test_jules_pull_request_does_not_require_label(self):
+        """pull_request events on internal PRs must run without the safe-for-ai-review label."""
+        condition = self._get_job_if(self.jules_workflow, 'jules-review')
+        self.assertIsNotNone(condition)
+        pr_branch = self._get_pr_event_branch(condition)
+        self.assertIsNotNone(pr_branch, "Could not locate pull_request branch in jules if-condition")
+        self.assertNotIn('safe-for-ai-review', pr_branch,
+                         "pull_request branch must not require 'safe-for-ai-review' label; "
+                         "it was causing internal PRs to be skipped.")
+
+    def test_codex_pull_request_requires_internal_repo(self):
+        """pull_request events must still require head.repo == current repo (security)."""
+        condition = self._get_job_if(self.codex_workflow, 'codex-review')
+        pr_branch = self._get_pr_event_branch(condition)
+        self.assertIsNotNone(pr_branch, "Could not locate pull_request branch")
+        self.assertIn('head.repo.full_name == github.repository', pr_branch,
+                      "pull_request branch must still check head.repo to block fork PRs.")
+
+    def test_jules_pull_request_requires_internal_repo(self):
+        """pull_request events must still require head.repo == current repo (security)."""
+        condition = self._get_job_if(self.jules_workflow, 'jules-review')
+        pr_branch = self._get_pr_event_branch(condition)
+        self.assertIsNotNone(pr_branch, "Could not locate pull_request branch")
+        self.assertIn('head.repo.full_name == github.repository', pr_branch,
+                      "pull_request branch must still check head.repo to block fork PRs.")
+
+    def test_codex_issue_comment_still_requires_label(self):
+        """issue_comment trigger must keep the safe-for-ai-review label requirement."""
+        condition = self._get_job_if(self.codex_workflow, 'codex-review')
+        self.assertIsNotNone(condition)
+        # The full condition must still contain the label check somewhere
+        # (used by issue_comment and pull_request_review_comment branches)
+        self.assertIn('safe-for-ai-review', condition,
+                      "The 'if' condition must still contain 'safe-for-ai-review' "
+                      "for issue_comment / pull_request_review_comment branches.")
+        # Verify it is NOT in the pull_request branch specifically
+        pr_branch = self._get_pr_event_branch(condition)
+        self.assertNotIn('safe-for-ai-review', pr_branch,
+                         "Label check must NOT be in the pull_request branch.")
+
+    def test_jules_issue_comment_still_requires_label(self):
+        """issue_comment trigger must keep the safe-for-ai-review label requirement."""
+        condition = self._get_job_if(self.jules_workflow, 'jules-review')
+        self.assertIsNotNone(condition)
+        self.assertIn('safe-for-ai-review', condition,
+                      "The 'if' condition must still contain 'safe-for-ai-review' "
+                      "for issue_comment / pull_request_review_comment branches.")
+        pr_branch = self._get_pr_event_branch(condition)
+        self.assertNotIn('safe-for-ai-review', pr_branch,
+                         "Label check must NOT be in the pull_request branch.")
+
+
 if __name__ == '__main__':
     unittest.main()
