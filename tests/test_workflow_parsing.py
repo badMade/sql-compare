@@ -131,7 +131,7 @@ class TestReviewWorkflows(unittest.TestCase):
         Workflows should guard JSON parsing by checking Content-Type or using
         a helper instead of blindly calling response.json()/text().
         """
-        json_guard_marker = "isJsonResponse"
+        json_guard_marker = "parseJsonResponse"
         self.assertIn(json_guard_marker, self.codex_workflow)
         self.assertIn(json_guard_marker, self.jules_workflow)
 

@@ -108,9 +108,9 @@ This repository includes GitHub Actions for automated code reviews using OpenAI'
     *   Set `OPENAI_API_KEY` in your GitHub repository secrets for Codex reviews.
     *   Set `GOOGLE_API_KEY` in your GitHub repository secrets for Jules (Gemini) reviews.
 2.  **Labels**:
-    *   To trigger an automatic review on a new or updated Pull Request, add the `safe-for-ai-review` label to the PR.
+    *   To trigger an automatic review on a new, updated (synchronize), or labeled Pull Request, add the `safe-for-ai-review` label to the PR.
 3.  **Comments**:
-    *   You can also trigger a review manually by commenting `@codex` or `@jules` on a Pull Request.
+    *   You can trigger a review manually by commenting `@codex` or `@jules` on a Pull Request or Pull Request Review Comment. Note that manual triggers also require the `safe-for-ai-review` label to be present on the PR for security.
 
 ### Workflow Configuration
 
