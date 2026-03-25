@@ -1,7 +1,7 @@
 import unittest
 import yaml
 import tempfile
-import os
+import shutil
 from pathlib import Path
 
 def extract_workflow_script(workflow_content, step_name):
