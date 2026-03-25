@@ -69,6 +69,14 @@ function isJsonResponse(response) {
   return typeof contentType === 'string' && contentType.toLowerCase().includes('application/json');
 }
 
+function parseJsonResponse(response) {
+  if (!isJsonResponse(response)) {
+    const status = response?.status ?? 'unknown';
+    throw new Error(`Response is not JSON (HTTP ${status}); expected application/json content-type.`);
+  }
+  return response.json();
+}
+
 async function safeReadBody(response, maxLength = MAX_ERROR_CHARS) {
   if (!response) {
     return 'No response received.';
@@ -125,6 +133,7 @@ module.exports = {
   fetchWithRetry,
   isJsonResponse,
   normalizePrNumber,
+  parseJsonResponse,
   parsePrNumber,
   safeErrorMessage,
   safeReadBody,

@@ -10,12 +10,11 @@ on:
 
 jobs:
   jules-review:
-    # Run only on internal PRs with the label, OR when @jules is mentioned.
+    # Run on all internal PRs, OR when @jules is mentioned on a labeled PR.
     if: |
       (
         github.event_name == 'pull_request' &&
-        github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review')
+        github.event.pull_request.head.repo.full_name == github.repository
       ) || (
         github.event_name == 'issue_comment' &&
         contains(github.event.comment.body, '@jules') &&
@@ -88,6 +87,7 @@ jobs:
               fetchWithRetry,
               isJsonResponse,
               normalizePrNumber,
+              parseJsonResponse,
               safeErrorMessage,
               safeReadBody,
             } = require('./.github/actions/review-utils');
