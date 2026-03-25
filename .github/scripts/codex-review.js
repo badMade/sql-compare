@@ -47,7 +47,23 @@ module.exports = async ({ github, context, core }) => {
       }),
     });
 
-    const result = await response.json();
+    const contentType = response.headers && response.headers.get && response.headers.get('content-type');
+    let result;
+    if (contentType && contentType.indexOf('application/json') !== -1) {
+      try {
+        result = await response.json();
+      } catch (parseError) {
+        throw new Error('Expected JSON response from OpenAI, but parsing failed: ' + parseError.message);
+      }
+    } else {
+      const bodyText = typeof response.text === 'function' ? await response.text() : '';
+      throw new Error(
+        'Expected JSON response from OpenAI, but received content-type "' +
+        (contentType || 'unknown') +
+        '". Body (truncated): ' +
+        bodyText.slice(0, 1000)
+      );
+    }
     const review = result.choices?.[0]?.message?.content || 'Unable to generate review.';
 
     await github.rest.pulls.createReview({
