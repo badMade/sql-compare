@@ -15,22 +15,29 @@ jobs:
       (
         github.event_name == 'pull_request' &&
         github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review')
+        (
+          contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review') ||
+          contains(github.event.pull_request.title, '@jules') ||
+          contains(github.event.pull_request.body, '@jules')
+        )
       ) || (
         github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
         contains(github.event.comment.body, '@jules') &&
-        contains(github.event.issue.labels.*.name, 'safe-for-ai-review') &&
-        (github.event.comment.author_association == 'MEMBER' ||
-         github.event.comment.author_association == 'OWNER' ||
-         github.event.comment.author_association == 'COLLABORATOR')
+        (
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'COLLABORATOR'
+        )
       ) || (
         github.event_name == 'pull_request_review_comment' &&
-        contains(github.event.comment.body, '@jules') &&
         github.event.pull_request.head.repo.full_name == github.repository &&
-        contains(github.event.pull_request.labels.*.name, 'safe-for-ai-review') &&
-        (github.event.comment.author_association == 'MEMBER' ||
-         github.event.comment.author_association == 'OWNER' ||
-         github.event.comment.author_association == 'COLLABORATOR')
+        contains(github.event.comment.body, '@jules') &&
+        (
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'COLLABORATOR'
+        )
       )
     runs-on: ubuntu-latest
     permissions:
