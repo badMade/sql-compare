@@ -1,4 +1,5 @@
 """Tests for GitHub Actions workflow YAML files."""
+import re
 import unittest
 from pathlib import Path
 import yaml
@@ -134,8 +135,11 @@ class TestAutoAssignReviewersWorkflow(unittest.TestCase):
         """Ensure error messages are truncated to prevent secret leakage."""
         script = self._get_request_reviewers_script()
         self.assertIsNotNone(script, "Could not find 'Request reviewers' step")
-        self.assertIn('slice(0, 500)', script,
-                      "Error messages must be truncated to 500 chars to prevent secret exposure")
+        self.assertRegex(
+            script,
+            r'(slice|substring)\s*\(0,\s*500\)',
+            "Error messages must be truncated to 500 chars to prevent secret exposure",
+        )
 
 
 if __name__ == '__main__':
