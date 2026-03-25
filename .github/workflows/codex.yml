@@ -52,12 +52,13 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const {
-              buildDiffString,
-              fetchPrFilesWithPagination,
-              parsePrNumber,
-              safeErrorMessage,
-            } = require('./.github/actions/review-utils');
+            const { getPrNumber, getPrDiff, fail } = require('./.github/scripts/ai-review-lib.js');
+            try {
+              const prNumber = getPrNumber(context);
+              if (!prNumber) {
+                console.log('Could not determine PR number, skipping.');
+                return;
+              }
 
             try {
               if (context.eventName === 'issue_comment' && !context.payload.issue?.pull_request) {
@@ -65,18 +66,12 @@ jobs:
                 return;
               }
 
-              const prNumber = parsePrNumber(context.payload);
-              const files = await fetchPrFilesWithPagination(github, context, prNumber, core);
-              const diff = buildDiffString(files);
-
+              const diff = await getPrDiff(github, context, prNumber);
               fs.writeFileSync('pr_diff.txt', diff);
               core.setOutput('pr_number', prNumber);
-
-              core.info(`Fetched diff for PR #${prNumber} (${files.length} files).`);
+              console.log(`Successfully fetched diff for PR #${prNumber}.`);
             } catch (error) {
-              const message = safeErrorMessage(error);
-              core.error(`Error fetching PR diff: ${message}`);
-              core.setFailed(`Failed to get PR diff: ${message}`);
+              fail(core, 'Failed to get PR diff', error);
             }
 
       - name: Review with Codex
@@ -84,92 +79,7 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PR_NUMBER: ${{ steps.diff.outputs.pr_number }}
-          PR_TITLE: ${{ steps.diff.outputs.pr_title }}
-          PR_BODY: ${{ steps.diff.outputs.pr_body }}
         with:
           script: |
-            const fs = require('fs');
-            const {
-              fetchWithRetry,
-              isJsonResponse,
-              normalizePrNumber,
-              safeErrorMessage,
-              safeReadBody,
-            } = require('./.github/actions/review-utils');
-
-            try {
-              const prNumber = normalizePrNumber(process.env.PR_NUMBER);
-
-              let diff;
-              try {
-                diff = fs.readFileSync('pr_diff.txt', 'utf8');
-              } catch (readError) {
-                const message = safeErrorMessage(readError);
-                core.setFailed(`Could not read PR diff file: ${message}`);
-                return;
-              }
-
-              if (!process.env.OPENAI_API_KEY) {
-                core.setFailed('OPENAI_API_KEY is not set');
-                return;
-              }
-
-              core.info(`Sending PR #${prNumber} diff to OpenAI for review...`);
-
-              const response = await fetchWithRetry(
-                () =>
-                  fetch('https://api.openai.com/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                      'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                      model: 'gpt-4o',
-                      messages: [
-                        {
-                          role: 'system',
-                          content:
-                            'You are a code reviewer. Review the following PR diff. ' +
-                            'Identify bugs, security issues, style problems, and suggest improvements. ' +
-                            'Be concise and actionable.',
-                        },
-                        {
-                          role: 'user',
-                          content: `Please review this pull request diff:\n\n${diff}`,
-                        },
-                      ],
-                      max_tokens: 4096,
-                    }),
-                  }),
-                { retries: 2, delayMs: 2000 }
-              );
-
-              if (!response?.ok) {
-                const errorText = await safeReadBody(response);
-                throw new Error(`OpenAI API responded with ${response?.status}: ${errorText}`);
-              }
-
-              if (!isJsonResponse(response)) {
-                const bodyText = await safeReadBody(response);
-                throw new Error(`OpenAI API returned non-JSON response: ${bodyText}`);
-              }
-
-              // Parse JSON response with content-type validation
-              const result = await parseJsonResponse(response);
-              const review = result.choices?.[0]?.message?.content || 'Unable to generate review.';
-
-              await github.rest.pulls.createReview({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: prNumber,
-                event: 'COMMENT',
-                body: `## Codex Review\n\n${review}`,
-              });
-
-              core.info(`Successfully posted Codex review for PR #${prNumber}.`);
-            } catch (error) {
-              const message = safeErrorMessage(error);
-              core.error(`Error during Codex review: ${message}`);
-              core.setFailed(`Review process failed: ${message}`);
-            }
+            const review = require('./.github/scripts/codex-review.js');
+            await review({ github, context, core });
