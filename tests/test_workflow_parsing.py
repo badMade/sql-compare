@@ -33,8 +33,6 @@ def extract_workflow_script(workflow_content, step_name):
 class TestWorkflowParsing(unittest.TestCase):
     def test_cleanup_workflow_embedded_script_parses(self):
         """Test that the embedded script in a mock workflow parses correctly using a temporary directory."""
-        if shutil.which('node') is None:
-            self.skipTest("Node.js executable not found on PATH. Skipping test.")
         workflow_yaml = """
 name: Test Workflow
 on: [push]
