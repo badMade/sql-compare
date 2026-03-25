@@ -91,6 +91,7 @@ jobs:
             const {
               fetchWithRetry,
               isJsonResponse,
+              parseJsonResponse,
               normalizePrNumber,
               safeErrorMessage,
               safeReadBody,
