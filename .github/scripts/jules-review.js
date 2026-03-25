@@ -44,7 +44,40 @@ module.exports = async ({ github, context, core }) => {
       }
     );
 
-    const result = await response.json();
+    const contentType = response.headers && response.headers.get
+      ? (response.headers.get('content-type') || '')
+      : '';
+
+    let result;
+    if (contentType.toLowerCase().includes('application/json')) {
+      try {
+        result = await response.json();
+      } catch (parseError) {
+        let bodySnippet = '';
+        try {
+          const textBody = await response.text();
+          bodySnippet = textBody.slice(0, 200);
+        } catch (_) {
+          bodySnippet = '<unavailable>';
+        }
+        throw new Error(
+          `Failed to parse JSON response from Gemini (content-type: ${contentType || 'unknown'}). ` +
+          `Body (first 200 chars): ${bodySnippet}`
+        );
+      }
+    } else {
+      let bodySnippet = '';
+      try {
+        const textBody = await response.text();
+        bodySnippet = textBody.slice(0, 200);
+      } catch (_) {
+        bodySnippet = '<unavailable>';
+      }
+      throw new Error(
+        `Unexpected non-JSON response from Gemini (content-type: ${contentType || 'unknown'}). ` +
+        `Body (first 200 chars): ${bodySnippet}`
+      );
+    }
     const review = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Unable to generate review.';
 
     await github.rest.pulls.createReview({
