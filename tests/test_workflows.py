@@ -66,6 +66,61 @@ class TestWorkflowYAML(unittest.TestCase):
         self.assertIsInstance(job['steps'], list, "Steps should be a list")
         self.assertGreater(len(job['steps']), 0, "Job should have at least one step")
 
+    def test_codex_and_jules_have_same_trigger_events(self):
+        """Test that Codex and Jules workflows have identical trigger events."""
+        codex_file = self.workflows_dir / 'codex.yml'
+        jules_file = self.workflows_dir / 'jules.yml'
+
+        self.assertTrue(codex_file.exists(), f"Codex workflow not found: {codex_file}")
+        self.assertTrue(jules_file.exists(), f"Jules workflow not found: {jules_file}")
+
+        with open(codex_file, 'r', encoding='utf-8') as f:
+            codex_data = yaml.safe_load(f)
+
+        with open(jules_file, 'r', encoding='utf-8') as f:
+            jules_data = yaml.safe_load(f)
+
+        # The 'on' key gets parsed as boolean True in YAML
+        # Both should have 'on' triggers (stored as True key)
+        on_key = True if True in codex_data else 'on'
+        self.assertIn(on_key, codex_data, "Codex workflow should have 'on' triggers")
+        self.assertIn(on_key, jules_data, "Jules workflow should have 'on' triggers")
+
+        # Extract pull_request types
+        codex_pr_types = codex_data[on_key].get('pull_request', {}).get('types', [])
+        jules_pr_types = jules_data[on_key].get('pull_request', {}).get('types', [])
+
+        # Both should have the same pull_request event types
+        self.assertEqual(
+            set(codex_pr_types),
+            set(jules_pr_types),
+            "Codex and Jules workflows should have identical pull_request event types. "
+            "This ensures both workflows trigger on the same PR events (opened, labeled, synchronize)."
+        )
+
+        # Verify 'synchronize' is included
+        self.assertIn('synchronize', codex_pr_types,
+                     "Codex workflow should trigger on 'synchronize' events")
+        self.assertIn('synchronize', jules_pr_types,
+                     "Jules workflow should trigger on 'synchronize' events")
+
+    def test_review_workflows_require_safe_for_ai_review_label(self):
+        """Test that both Codex and Jules workflows require safe-for-ai-review label."""
+        codex_file = self.workflows_dir / 'codex.yml'
+        jules_file = self.workflows_dir / 'jules.yml'
+
+        with open(codex_file, 'r', encoding='utf-8') as f:
+            codex_content = f.read()
+
+        with open(jules_file, 'r', encoding='utf-8') as f:
+            jules_content = f.read()
+
+        # Both workflows should check for the safe-for-ai-review label
+        self.assertIn('safe-for-ai-review', codex_content,
+                     "Codex workflow should require 'safe-for-ai-review' label")
+        self.assertIn('safe-for-ai-review', jules_content,
+                     "Jules workflow should require 'safe-for-ai-review' label")
+
 
 if __name__ == '__main__':
     unittest.main()
