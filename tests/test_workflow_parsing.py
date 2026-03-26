@@ -135,5 +135,28 @@ class TestReviewWorkflows(unittest.TestCase):
         self.assertIn(json_guard_marker, self.codex_workflow)
         self.assertIn(json_guard_marker, self.jules_workflow)
 
+    def test_workflows_fetch_pr_object_before_outputs(self):
+        """
+        Both workflows must fetch the PR object via github.rest.pulls.get()
+        in the 'Get PR diff' step and set pr_title / pr_body outputs after it.
+        """
+        pr_fetch = "github.rest.pulls.get("
+        pr_title_output = "core.setOutput('pr_title', pr.title)"
+        pr_body_output = "core.setOutput('pr_body', pr.body)"
+        for name, content in (("codex", self.codex_workflow), ("jules", self.jules_workflow)):
+            script = extract_workflow_script(content, "Get PR diff")
+            self.assertIsNotNone(script, f"{name}.yml: 'Get PR diff' step not found")
+            self.assertIn(pr_fetch, script, f"{name}.yml: 'Get PR diff' missing github.rest.pulls.get() call")
+            self.assertIn(pr_title_output, script, f"{name}.yml: 'Get PR diff' missing pr_title output")
+            self.assertIn(pr_body_output, script, f"{name}.yml: 'Get PR diff' missing pr_body output")
+            # Verify ordering: API fetch must appear before the output assignments
+            fetch_pos = script.index(pr_fetch)
+            title_pos = script.index(pr_title_output)
+            body_pos = script.index(pr_body_output)
+            self.assertLess(fetch_pos, title_pos,
+                            f"{name}.yml: github.rest.pulls.get() must precede pr_title output")
+            self.assertLess(fetch_pos, body_pos,
+                            f"{name}.yml: github.rest.pulls.get() must precede pr_body output")
+
 if __name__ == '__main__':
     unittest.main()
