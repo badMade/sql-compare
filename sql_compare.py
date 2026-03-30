@@ -32,6 +32,10 @@ from pathlib import Path
 
 SQL_CLAUSE_TERMINATORS = ['WHERE', 'GROUP BY', 'HAVING', 'ORDER BY', 'LIMIT', 'OFFSET', 'QUALIFY', 'WINDOW', 'UNION', 'INTERSECT', 'EXCEPT']
 from collections import Counter
+WHITESPACE_REGEX = re.compile(r'\s+')
+
+
+
 # --- Optional GUI imports guarded ---
 try:
     import tkinter as tk
@@ -87,7 +91,7 @@ def strip_sql_comments(s: str) -> str:
 
 def collapse_whitespace(s: str) -> str:
     """Collapse runs of whitespace to a single space and strip."""
-    return ' '.join(s.split())
+    return WHITESPACE_REGEX.sub(' ', s).strip()
 
 
 QUOTED_STRING_REGEX = re.compile(
