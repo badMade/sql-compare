@@ -17,14 +17,17 @@ jobs:
           script: |
             const reviewers = ['badMade']; // Add valid collaborator usernames here
             const prNumber = context.payload.pull_request?.number;
+            const author = context.payload.pull_request?.user?.login;
 
             if (!prNumber) {
               core.setFailed('No pull request number found in payload.');
               return;
             }
 
-            if (!Array.isArray(reviewers) || reviewers.length === 0) {
-              core.info('No reviewers specified; skipping assignment.');
+            const validReviewers = reviewers.filter(r => r !== author);
+
+            if (!Array.isArray(validReviewers) || validReviewers.length === 0) {
+              core.info('No valid reviewers available (or author is the only reviewer); skipping assignment.');
               return;
             }
 
@@ -33,11 +36,11 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: prNumber,
-                reviewers,
+                reviewers: validReviewers,
               });
-              core.info(`Requested reviews from users: ${reviewers.join(', ')}`);
+              core.info(`Requested reviews from users: ${validReviewers.join(', ')}`);
             } catch (error) {
-              const errorMessage = error?.message || String(error);
+              const errorMessage = (error?.message || String(error)).slice(0, 500);
               core.error(`Failed to assign reviewers: ${errorMessage}`);
               core.setFailed(`Failed to assign reviewers: ${errorMessage}`);
             }

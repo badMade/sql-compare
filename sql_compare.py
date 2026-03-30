@@ -1052,7 +1052,17 @@ class SQLCompareGUI:
         try:
             content = self.txt.get('1.0', 'end-1c')
             self.root.clipboard_clear(); self.root.clipboard_append(content)
-            messagebox.showinfo('Copied', 'Output copied to clipboard.')
+
+            # UX Enhancement: Inline feedback instead of blocking messagebox
+            current_text = self.btn_copy.cget('text')
+            if current_text != "✓ Copied!":
+                self.btn_copy.config(text="✓ Copied!")
+
+                def reset_text():
+                    if self.btn_copy.winfo_exists():
+                        self.btn_copy.config(text=current_text)
+
+                self.root.after(2000, reset_text)
         except Exception as e:
             messagebox.showerror('Error', f'Failed to copy: {e}')
 
