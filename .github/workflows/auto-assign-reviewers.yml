@@ -28,16 +28,22 @@ jobs:
               return;
             }
 
+            const validReviewers = reviewers.filter(r => r !== context.payload.pull_request.user.login);
+            if (validReviewers.length === 0) {
+              core.info('No valid reviewers to assign (author cannot be reviewer).');
+              return;
+            }
+
             try {
               await github.rest.pulls.requestReviewers({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: prNumber,
-                reviewers,
+                reviewers: validReviewers,
               });
-              core.info(`Requested reviews from users: ${reviewers.join(', ')}`);
+              core.info(`Requested reviews from users: ${validReviewers.join(', ')}`);
             } catch (error) {
-              const errorMessage = error?.message || String(error);
+              const errorMessage = (error?.message || String(error)).slice(0, 500);
               core.error(`Failed to assign reviewers: ${errorMessage}`);
               core.setFailed(`Failed to assign reviewers: ${errorMessage}`);
             }
