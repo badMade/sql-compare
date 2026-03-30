@@ -88,6 +88,7 @@ jobs:
               fetchWithRetry,
               isJsonResponse,
               normalizePrNumber,
+              parseJsonResponse,
               safeErrorMessage,
               safeReadBody,
             } = require('./.github/actions/review-utils');
@@ -114,11 +115,12 @@ jobs:
               const response = await fetchWithRetry(
                 () =>
                   fetch(
-                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${process.env.GOOGLE_API_KEY}`,
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent`,
                     {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
+                        'x-goog-api-key': process.env.GOOGLE_API_KEY,
                       },
                       body: JSON.stringify({
                         contents: [
