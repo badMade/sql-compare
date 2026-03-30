@@ -89,6 +89,13 @@ async function safeReadBody(response, maxLength = MAX_ERROR_CHARS) {
   }
 }
 
+async function parseJsonResponse(response) {
+  if (!isJsonResponse(response)) {
+    throw new Error('Response does not have application/json content-type.');
+  }
+  return await response.json();
+}
+
 async function fetchWithRetry(requestFn, options = {}) {
   const {
     retries = 2,
@@ -125,6 +132,7 @@ module.exports = {
   fetchWithRetry,
   isJsonResponse,
   normalizePrNumber,
+  parseJsonResponse,
   parsePrNumber,
   safeErrorMessage,
   safeReadBody,
