@@ -10,7 +10,7 @@ on:
 
 jobs:
   codex-review:
-    # Only run on internal PRs or when @codex is mentioned
+    # Only run on internal PRs with the label, or when @codex is mentioned by a collaborator.
     if: |
       (
         github.event_name == 'pull_request' &&
@@ -58,20 +58,20 @@ jobs:
               parsePrNumber,
               safeErrorMessage,
             } = require('./.github/actions/review-utils');
-
             try {
               if (context.eventName === 'issue_comment' && !context.payload.issue?.pull_request) {
                 core.info('Comment on a regular issue; skipping Codex review.');
                 return;
               }
-
               const prNumber = parsePrNumber(context.payload);
               const files = await fetchPrFilesWithPagination(github, context, prNumber, core);
+              if (files.length === 0) {
+                core.info('No files to review (fork PR or empty diff).');
+                return;
+              }
               const diff = buildDiffString(files);
-
               fs.writeFileSync('pr_diff.txt', diff);
               core.setOutput('pr_number', prNumber);
-
               core.info(`Fetched diff for PR #${prNumber} (${files.length} files).`);
             } catch (error) {
               const message = safeErrorMessage(error);
@@ -84,8 +84,6 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PR_NUMBER: ${{ steps.diff.outputs.pr_number }}
-          PR_TITLE: ${{ steps.diff.outputs.pr_title }}
-          PR_BODY: ${{ steps.diff.outputs.pr_body }}
         with:
           script: |
             const fs = require('fs');
@@ -96,10 +94,8 @@ jobs:
               safeErrorMessage,
               safeReadBody,
             } = require('./.github/actions/review-utils');
-
             try {
               const prNumber = normalizePrNumber(process.env.PR_NUMBER);
-
               let diff;
               try {
                 diff = fs.readFileSync('pr_diff.txt', 'utf8');
@@ -108,14 +104,11 @@ jobs:
                 core.setFailed(`Could not read PR diff file: ${message}`);
                 return;
               }
-
               if (!process.env.OPENAI_API_KEY) {
                 core.setFailed('OPENAI_API_KEY is not set');
                 return;
               }
-
               core.info(`Sending PR #${prNumber} diff to OpenAI for review...`);
-
               const response = await fetchWithRetry(
                 () =>
                   fetch('https://api.openai.com/v1/chat/completions', {
@@ -144,21 +137,16 @@ jobs:
                   }),
                 { retries: 2, delayMs: 2000 }
               );
-
               if (!response?.ok) {
                 const errorText = await safeReadBody(response);
                 throw new Error(`OpenAI API responded with ${response?.status}: ${errorText}`);
               }
-
               if (!isJsonResponse(response)) {
                 const bodyText = await safeReadBody(response);
                 throw new Error(`OpenAI API returned non-JSON response: ${bodyText}`);
               }
-
-              // Parse JSON response with content-type validation
-              const result = await parseJsonResponse(response);
+              const result = await response.json();
               const review = result.choices?.[0]?.message?.content || 'Unable to generate review.';
-
               await github.rest.pulls.createReview({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
