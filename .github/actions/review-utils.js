@@ -79,7 +79,7 @@ function buildDiffString(files) {
 }
 
 /**
- * Retry a fetch call with exponential-ish backoff.
+ * Retry a fetch call with linear backoff.
  * @param {Function} fn - A function that returns a fetch Promise.
  * @param {Object} opts - { retries: number, delayMs: number }
  */
