@@ -1,5 +1,9 @@
 import unittest
 import argparse
+import shutil
+import subprocess
+import textwrap
+from pathlib import Path
 from unittest.mock import patch
 from sql_compare import (
     _extract_base_table,
@@ -10,6 +14,119 @@ from sql_compare import (
     canonicalize_select_list,
 )
 
+
+class TestWorkflowScripts(unittest.TestCase):
+    def test_cleanup_workflow_embedded_script_parses(self):
+        """The embedded github-script JavaScript should parse without syntax errors."""
+        if shutil.which('node') is None:
+            self.skipTest("Node.js executable not found on PATH. Skipping test.")
+
+        workflow = (
+            Path(__file__).resolve().parent.parent
+            / '.github/workflows/cleanup-redundant-prs.yml'
+        ).read_text(encoding='utf-8')
+
+        workflow_lines = workflow.splitlines()
+        script_start_line_idx = -1
+        script_block_indent = -1
+
+        for i, line in enumerate(workflow_lines):
+            stripped_line = line.lstrip()
+            if stripped_line.startswith('script: |'):
+                script_start_line_idx = i
+                script_block_indent = len(line) - len(stripped_line)
+                break
+
+        self.assertNotEqual(
+            script_start_line_idx,
+            -1,
+            msg="Could not find a 'script: |' block in cleanup-redundant-prs.yml",
+        )
+
+        script_content_lines = []
+        for i in range(script_start_line_idx + 1, len(workflow_lines)):
+            line = workflow_lines[i]
+            if not line.strip() or (len(line) - len(line.lstrip())) > script_block_indent:
+                script_content_lines.append(line)
+            else:
+                break
+
+        script = textwrap.dedent('\n'.join(script_content_lines))
+        parser = """
+const fs = require('fs');
+const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+const script = fs.readFileSync(0, 'utf8');
+new AsyncFunction('github', 'context', 'core', script);
+"""
+        completed = subprocess.run(
+            ['node', '-e', parser],
+            input=script,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg=completed.stderr or completed.stdout,
+        )
+
+
+class TestWorkflowScripts(unittest.TestCase):
+    def test_cleanup_workflow_uses_current_github_script(self):
+        """The cleanup workflow should use actions/github-script@v7."""
+        workflow = Path('.github/workflows/cleanup-redundant-prs.yml').read_text(encoding='utf-8')
+        self.assertIn('uses: actions/github-script@v7', workflow)
+
+    def test_cleanup_workflow_embedded_script_parses(self):
+        """The embedded github-script JavaScript should parse without syntax errors."""
+        if shutil.which('node') is None:
+            self.skipTest("Node.js executable not found on PATH. Skipping test.")
+            return
+
+        workflow = Path('.github/workflows/cleanup-redundant-prs.yml').read_text(encoding='utf-8')
+
+        # Find the 'script: |' line and its indentation
+        workflow_lines = workflow.splitlines()
+        script_content_lines = []
+        in_script_block = False
+        script_block_indent = -1
+
+        for line in workflow_lines:
+            if in_script_block:
+                if not line.strip() or (len(line) - len(line.lstrip())) > script_block_indent:
+                    script_content_lines.append(line)
+                else:
+                    break
+            elif line.lstrip().startswith('script: |'):
+                in_script_block = True
+                script_block_indent = len(line) - len(line.lstrip())
+
+        if script_content_lines:
+            script = textwrap.dedent('\n'.join(script_content_lines))
+        else:
+            script = ''
+        parser = """
+const fs = require('fs');
+const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor;
+// Read script from stdin, which is where Python's `input` argument sends it.
+const script = fs.readFileSync(0, 'utf8');
+new AsyncFunction('github', 'context', 'core', script);
+"""
+        # Run node process, passing the parser via -e and the script via stdin.
+        # This avoids creating temporary files.
+        completed = subprocess.run(
+            ['node', '-e', parser],
+            input=script,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg=completed.stderr or completed.stdout,
+        )
 
 
 class TestCollapseWhitespace(unittest.TestCase):

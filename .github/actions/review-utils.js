@@ -1,141 +1,122 @@
-'use strict';
+const MAX_ERROR_CHARS = 500;
+const DEFAULT_PER_PAGE = 100;
+const DEFAULT_MAX_PAGES = 10;
 
-const MAX_PAGES = 10;
+function safeErrorMessage(error, maxLength = MAX_ERROR_CHARS) {
+  const message =
+    (error && error.message) ||
+    (typeof error === 'string' ? error : '') ||
+    String(error || 'Unknown error');
+  return message.length > maxLength ? `${message.slice(0, maxLength)}...` : message;
+}
 
-/**
- * Extract the PR number from a webhook payload.
- * Works for pull_request, issue_comment, and pull_request_review_comment events.
- */
+function normalizePrNumber(rawNumber) {
+  const prNumber = Number.parseInt(rawNumber, 10);
+  if (!Number.isInteger(prNumber) || prNumber <= 0) {
+    throw new Error('Invalid pull request number.');
+  }
+  return prNumber;
+}
+
 function parsePrNumber(payload) {
-  const prNumber = payload.pull_request?.number || payload.issue?.number;
-  if (!prNumber) {
-    throw new Error('Could not determine PR number from payload');
+  const raw = payload?.pull_request?.number ?? payload?.issue?.number;
+  if (raw === undefined || raw === null) {
+    throw new Error('Could not determine pull request number from event payload.');
   }
-  return prNumber;
+  return normalizePrNumber(raw);
 }
 
-/**
- * Convert a PR number from an environment variable string to a validated number.
- */
-function normalizePrNumber(value) {
-  const prNumber = Number(value);
-  if (!prNumber || !Number.isFinite(prNumber)) {
-    throw new Error(`Invalid PR number: ${value}`);
-  }
-  return prNumber;
-}
-
-/**
- * Fetch all changed files for a PR with pagination, capped at MAX_PAGES.
- * Also verifies that issue_comment events come from internal PRs (not forks)
- * to prevent leaking repository secrets.
- */
-async function fetchPrFilesWithPagination(github, context, prNumber, core) {
-  // For issue_comment events the job-level `if` cannot access head.repo.full_name,
-  // so verify at runtime to prevent fork PRs from triggering reviews with repo secrets.
-  if (context.eventName === 'issue_comment') {
-    const { data: pr } = await github.rest.pulls.get({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
-      pull_number: prNumber,
-    });
-    const baseRepo = `${context.repo.owner}/${context.repo.repo}`;
-    if (pr.head.repo.full_name !== baseRepo) {
-      core.info('PR is from a fork; skipping review to avoid exposing repo secrets.');
-      return [];
-    }
-  }
-
-  let files = [];
-  let page = 1;
-  while (page <= MAX_PAGES) {
+async function fetchPrFilesWithPagination(
+  github,
+  context,
+  prNumber,
+  core,
+  perPage = DEFAULT_PER_PAGE,
+  maxPages = DEFAULT_MAX_PAGES
+) {
+  const files = [];
+  for (let page = 1; page <= maxPages; page += 1) {
     const { data: pageFiles } = await github.rest.pulls.listFiles({
       owner: context.repo.owner,
       repo: context.repo.repo,
       pull_number: prNumber,
-      per_page: 100,
+      per_page: perPage,
       page,
     });
-    files = files.concat(pageFiles);
-    if (pageFiles.length < 100) break;
-    page++;
-  }
-  if (page > MAX_PAGES) {
-    throw new Error(
-      `PR diff exceeds the ${MAX_PAGES}-page limit (${MAX_PAGES * 100} files); ` +
-      'aborting to avoid secondary rate limits.'
-    );
+    files.push(...pageFiles);
+    if (pageFiles.length < perPage) {
+      break;
+    }
+    if (page === maxPages) {
+      const errorMsg = `Reached pagination cap (${maxPages} pages) while fetching PR files.`;
+      if (core) {
+        core.warning(errorMsg);
+      }
+      throw new Error(errorMsg);
+    }
   }
   return files;
 }
 
-/**
- * Build a unified diff string from an array of PR file objects.
- */
 function buildDiffString(files) {
   return files
-    .map((f) => `--- ${f.filename}\n+++ ${f.filename}\n${f.patch || '(binary)'}`)
+    .map((file) => `--- ${file.filename}\n+++ ${file.filename}\n${file.patch || '(binary)'}`)
     .join('\n\n');
 }
 
-/**
- * Retry a fetch call with linear backoff.
- * @param {Function} fn - A function that returns a fetch Promise.
- * @param {Object} opts - { retries: number, delayMs: number }
- */
-async function fetchWithRetry(fn, { retries = 2, delayMs = 2000 } = {}) {
-  let lastError;
-  for (let attempt = 0; attempt <= retries; attempt++) {
+function isJsonResponse(response) {
+  const contentType = response?.headers?.get?.('content-type');
+  return typeof contentType === 'string' && contentType.toLowerCase().includes('application/json');
+}
+
+async function safeReadBody(response, maxLength = MAX_ERROR_CHARS) {
+  if (!response) {
+    return 'No response received.';
+  }
+  try {
+    if (isJsonResponse(response)) {
+      const json = await response.json();
+      const jsonText = JSON.stringify(json);
+      return jsonText.length > maxLength ? `${jsonText.slice(0, maxLength)}...` : jsonText;
+    }
+    const text = await response.text();
+    if (!text) {
+      return 'Empty response body.';
+    }
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+  } catch (error) {
+    return `Failed to read response body: ${safeErrorMessage(error, maxLength)}`;
+  }
+}
+
+async function fetchWithRetry(requestFn, options = {}) {
+  const {
+    retries = 2,
+    delayMs = 2000,
+    shouldRetry = (response) => response && (response.status === 429 || response.status >= 500),
+  } = options;
+
+  let attempt = 0;
+  while (true) {
+    attempt += 1;
     try {
-      return await fn();
-    } catch (err) {
-      lastError = err;
-      if (attempt < retries) {
-        await new Promise((r) => setTimeout(r, delayMs * (attempt + 1)));
+      const response = await requestFn();
+      if (shouldRetry(response) && attempt <= retries) {
+        if (delayMs) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+        continue;
+      }
+      return response;
+    } catch (error) {
+      if (attempt > retries) {
+        throw error;
+      }
+      if (delayMs) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
     }
   }
-  throw lastError;
-}
-
-/**
- * Check whether a fetch Response has a JSON content-type.
- */
-function isJsonResponse(response) {
-  const ct = response?.headers?.get?.('content-type') || '';
-  return ct.includes('application/json');
-}
-
-/**
- * Redact potential secrets (API keys, bearer tokens) from error text
- * to prevent accidental exposure in workflow logs.
- */
-function sanitizeSecrets(text) {
-  return text
-    .replace(/key=[^&\s]+/g, 'key=[REDACTED]')
-    .replace(/Authorization:\s*Bearer\s+[^\s&]+/gi, 'Authorization: Bearer [REDACTED]')
-    .replace(/x-goog-api-key:\s*[^\s&]+/gi, 'x-goog-api-key: [REDACTED]');
-}
-
-/**
- * Safely read the body text of a fetch Response, returning a fallback on failure.
- * Automatically sanitizes secrets from the response text.
- */
-async function safeReadBody(response) {
-  try {
-    const text = await response.text();
-    return sanitizeSecrets(text);
-  } catch {
-    return '(unable to read response body)';
-  }
-}
-
-/**
- * Extract a safe error message string from an unknown error value.
- */
-function safeErrorMessage(error) {
-  if (error && typeof error.message === 'string') return error.message;
-  return String(error);
 }
 
 module.exports = {
@@ -147,5 +128,4 @@ module.exports = {
   parsePrNumber,
   safeErrorMessage,
   safeReadBody,
-  sanitizeSecrets,
 };

@@ -15,12 +15,29 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
           script: |
-            const { requestTeamReviews } = require('./.github/scripts/auto-assign-reviewers.js');
-            const teamReviewers = []; // Add team names here
+            const reviewers = ['badMade']; // Add valid collaborator usernames here
+            const prNumber = context.payload.pull_request?.number;
 
-            await requestTeamReviews({
-              github,
-              context,
-              core,
-              teamReviewers
-            });
+            if (!prNumber) {
+              core.setFailed('No pull request number found in payload.');
+              return;
+            }
+
+            if (!Array.isArray(reviewers) || reviewers.length === 0) {
+              core.info('No reviewers specified; skipping assignment.');
+              return;
+            }
+
+            try {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                reviewers,
+              });
+              core.info(`Requested reviews from users: ${reviewers.join(', ')}`);
+            } catch (error) {
+              const errorMessage = error?.message || String(error);
+              core.error(`Failed to assign reviewers: ${errorMessage}`);
+              core.setFailed(`Failed to assign reviewers: ${errorMessage}`);
+            }
