@@ -1,4 +1,6 @@
 import unittest
+import os
+import tempfile
 import argparse
 import shutil
 import subprocess
@@ -12,6 +14,7 @@ from sql_compare import (
     top_level_find_kw, collapse_whitespace,
     _tokenize_from_clause_body, split_top_level,
     canonicalize_select_list,
+    safe_read_file,
 )
 
 
@@ -865,6 +868,51 @@ class TestCanonicalizeSelectList(unittest.TestCase):
     def test_missing_select_or_from(self):
         self.assertEqual(canonicalize_select_list("UPDATE t SET a = b"), "UPDATE t SET a = b")
         self.assertEqual(canonicalize_select_list("SELECT a, b WHERE x=1"), "SELECT a, b WHERE x=1")
+
+
+class TestSafeReadFile(unittest.TestCase):
+    def test_safe_read_file_success(self):
+        """It should read the content of a normal text file."""
+
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False) as f:
+            f.write("SELECT * FROM table;\n")
+            temp_path = f.name
+
+        try:
+            content = safe_read_file(temp_path)
+            self.assertEqual(content, "SELECT * FROM table;\n")
+        finally:
+            try:
+                os.unlink(temp_path)
+            except FileNotFoundError:
+                pass
+
+    def test_safe_read_file_not_found(self):
+        """It should raise FileNotFoundError if the file does not exist."""
+
+        with self.assertRaises(FileNotFoundError) as context:
+            safe_read_file("non_existent_file.sql")
+
+        self.assertIn("File not found", str(context.exception))
+
+    def test_safe_read_file_invalid_utf8(self):
+        """It should ignore invalid utf-8 characters instead of crashing."""
+
+        with tempfile.NamedTemporaryFile(mode='wb', delete=False) as f:
+            # Write valid text followed by an invalid UTF-8 byte sequence
+            f.write(b"SELECT * FROM \xff\xfe table;")
+            temp_path = f.name
+
+        try:
+            content = safe_read_file(temp_path)
+            # The invalid bytes should be ignored/dropped, so it reads the rest
+            self.assertIn("SELECT * FROM ", content)
+            self.assertIn(" table;", content)
+        finally:
+            try:
+                os.unlink(temp_path)
+            except FileNotFoundError:
+                pass
 
 
 if __name__ == '__main__':
