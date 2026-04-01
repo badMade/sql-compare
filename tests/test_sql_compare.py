@@ -1,4 +1,5 @@
 import unittest
+import re
 import argparse
 import shutil
 import subprocess
@@ -11,7 +12,7 @@ from sql_compare import (
     strip_sql_comments, uppercase_outside_quotes,
     top_level_find_kw, collapse_whitespace,
     _tokenize_from_clause_body, split_top_level,
-    canonicalize_select_list,
+    canonicalize_select_list, normalize_sql, remove_trailing_semicolon, remove_outer_parentheses,
 )
 
 
@@ -865,6 +866,76 @@ class TestCanonicalizeSelectList(unittest.TestCase):
     def test_missing_select_or_from(self):
         self.assertEqual(canonicalize_select_list("UPDATE t SET a = b"), "UPDATE t SET a = b")
         self.assertEqual(canonicalize_select_list("SELECT a, b WHERE x=1"), "SELECT a, b WHERE x=1")
+
+
+
+class TestNormalizeSQL(unittest.TestCase):
+    def test_normalize_sql_end_to_end(self):
+        """Test complex SQL string transformations."""
+        sql = """
+        -- This is a comment
+        SELECT
+            id,
+            name,
+            'uppercase' as str -- inline comment
+        FROM users
+        WHERE status = 'active';
+        """
+        expected = "SELECT ID, NAME, 'uppercase' AS STR FROM USERS WHERE STATUS = 'active'"
+        self.assertEqual(normalize_sql(sql), expected)
+
+    def test_normalize_sql_edge_cases(self):
+        """Test edge cases like empty strings, comments-only, and multiple semicolons."""
+        self.assertEqual(normalize_sql(""), "")
+        self.assertEqual(normalize_sql("   "), "")
+        self.assertEqual(normalize_sql("-- just a comment"), "")
+        self.assertEqual(normalize_sql("/* multiline\ncomment */"), "")
+        self.assertEqual(normalize_sql("SELECT 1;;;"), "SELECT 1;;")
+        self.assertEqual(normalize_sql("SELECT 1; ; ; "), "SELECT 1; ;")
+
+    def test_normalize_sql_complex(self):
+        sql = "(((SELECT * FROM test)));"
+        expected = "SELECT * FROM TEST"
+        self.assertEqual(normalize_sql(sql), expected)
+
+    def test_normalize_sql_complex_with_comment(self):
+        sql = "(((SELECT * FROM test /* test */)));"
+        expected = "SELECT * FROM TEST"
+        self.assertEqual(normalize_sql(sql), expected)
+
+    @patch('sql_compare.strip_sql_comments')
+    @patch('sql_compare.collapse_whitespace')
+    @patch('sql_compare.remove_trailing_semicolon')
+    @patch('sql_compare.remove_outer_parentheses')
+    @patch('sql_compare.uppercase_outside_quotes')
+    def test_normalize_sql_pipeline_order(
+        self, mock_uppercase, mock_remove_parens,
+        mock_remove_semi, mock_collapse_ws, mock_strip_comments
+    ):
+        """Verify the execution order of internal pipeline functions."""
+        # Setup mocks to return predictable values so we can track them
+        mock_strip_comments.return_value = "stripped"
+        mock_collapse_ws.side_effect = ["collapsed1", "collapsed2"]
+        mock_remove_semi.return_value = "no_semi"
+        mock_remove_parens.return_value = "no_parens"
+        mock_uppercase.return_value = "uppercased"
+
+        result = normalize_sql("  raw sql  ")
+
+        # Verify final result is from the last pipeline step
+        self.assertEqual(result, "collapsed2")
+
+        # Verify call order and arguments
+        mock_strip_comments.assert_called_once_with("raw sql")
+
+        # Check collapse_ws calls
+        self.assertEqual(mock_collapse_ws.call_count, 2)
+        mock_collapse_ws.assert_any_call("stripped")
+        mock_collapse_ws.assert_any_call("uppercased")
+
+        mock_remove_semi.assert_called_once_with("collapsed1")
+        mock_remove_parens.assert_called_once_with("no_semi")
+        mock_uppercase.assert_called_once_with("no_parens")
 
 
 if __name__ == '__main__':

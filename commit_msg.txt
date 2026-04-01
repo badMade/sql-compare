@@ -1,0 +1,5 @@
+🧪 [Add tests for normalize_sql pipeline]
+
+🎯 What: Added tests for the `normalize_sql` function in `sql_compare.py`. The function previously lacked tests.
+📊 Coverage: Added tests covering end-to-end functionality, complex transformations, specific edge cases like empty strings and multiple semicolons, and the internal function execution order.
+✨ Result: `normalize_sql` test suite fully passes and increases codebase test coverage.
