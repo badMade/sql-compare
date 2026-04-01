@@ -15,8 +15,12 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
           script: |
-            const reviewers = ['badMade']; // Add valid collaborator usernames here
+            const defaultReviewers = ['badMade']; // Add valid collaborator usernames here
             const prNumber = context.payload.pull_request?.number;
+            const prAuthor = context.payload.pull_request?.user?.login;
+
+            // Filter out the PR author to prevent API 422 errors
+            const reviewers = defaultReviewers.filter(user => user !== prAuthor);
 
             if (!prNumber) {
               core.setFailed('No pull request number found in payload.');
@@ -37,7 +41,7 @@ jobs:
               });
               core.info(`Requested reviews from users: ${reviewers.join(', ')}`);
             } catch (error) {
-              const errorMessage = error?.message || String(error);
+              const errorMessage = (error?.message || String(error)).slice(0, 500);
               core.error(`Failed to assign reviewers: ${errorMessage}`);
               core.setFailed(`Failed to assign reviewers: ${errorMessage}`);
             }
